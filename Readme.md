@@ -19,3 +19,16 @@ addressing mode.
 Download: [ili9488_waveshare.patch](patches/ili9488_waveshare.patch)
 
 
+RP2xxx Low-Power
+----------------
+
+This patch reimplements light-sleep/deep-sleep from the alarm-module to
+provide aggressive power-saving. It also implements the alarm-module for
+the RP2350.
+
+Due to the aggressive power-saving connections are lost during light-sleep
+and on-going activities (e.g. playing music) will stop. It is the duty
+of the application code to deinit/reinit any peripherals cleanly before
+and after light-sleep.
+
+Download: [rp2xxx_low_power.patch](patches/rp2xxx_low_power.patch)

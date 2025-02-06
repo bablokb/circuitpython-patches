@@ -1,0 +1,1034 @@
+diff --git a/ports/raspberrypi/Makefile b/ports/raspberrypi/Makefile
+index cf40af7bab..cf94af056f 100644
+--- a/ports/raspberrypi/Makefile
++++ b/ports/raspberrypi/Makefile
+@@ -530,6 +530,7 @@ SRC_C += \
+ 	bindings/rp2pio/__init__.c \
+ 	common-hal/rp2pio/StateMachine.c \
+ 	common-hal/rp2pio/__init__.c \
++	common-hal/alarm/rosc.c \
+ 	audio_dma.c \
+ 	background.c \
+ 	peripherals/pins.c \
+diff --git a/ports/raspberrypi/bindings/cyw43/__init__.c b/ports/raspberrypi/bindings/cyw43/__init__.c
+index c14f15212f..20e4f1bf5e 100644
+--- a/ports/raspberrypi/bindings/cyw43/__init__.c
++++ b/ports/raspberrypi/bindings/cyw43/__init__.c
+@@ -15,13 +15,24 @@
+ #include "src/rp2_common/hardware_gpio/include/hardware/gpio.h"
+ 
+ #include "lib/cyw43-driver/src/cyw43.h"
++#include "pico/cyw43_arch.h"
+ 
+ static int power_management_value = PM_DISABLED;
+ 
+-void cyw43_enter_deep_sleep(void) {
+-#define WL_REG_ON 23
+-    gpio_set_dir(WL_REG_ON, GPIO_OUT);
+-    gpio_put(WL_REG_ON, false);
++// called from common-hal/alarm/__init__.c
++void bindings_cyw43_power_down(void) {
++    cyw43_arch_deinit();
++    gpio_set_dir(CYW43_DEFAULT_PIN_WL_REG_ON, GPIO_OUT);
++    gpio_put(CYW43_DEFAULT_PIN_WL_REG_ON, false);
++}
++
++// called from supervisor/port.c and common-hal/alarm/__init__.c
++bool bindings_cyw43_power_up(void) {
++    gpio_set_dir(CYW43_DEFAULT_PIN_WL_REG_ON, GPIO_OUT);
++    gpio_put(CYW43_DEFAULT_PIN_WL_REG_ON, true);
++    // Change this as a placeholder as to how to init with country code.
++    // Default country code is CYW43_COUNTRY_WORLDWIDE)
++    return cyw43_arch_init_with_country(PICO_CYW43_ARCH_DEFAULT_COUNTRY_CODE);
+ }
+ 
+ void bindings_cyw43_wifi_enforce_pm(void) {
+@@ -35,7 +46,6 @@ void bindings_cyw43_wifi_enforce_pm(void) {
+ //|     in :py:mod:`board`. A `CywPin` can be used as a DigitalInOut, but not with other
+ //|     peripherals such as `PWMOut`."""
+ //|
+-//|
+ MP_DEFINE_CONST_OBJ_TYPE(
+     cyw43_pin_type,
+     MP_QSTR_CywPin,
+@@ -52,7 +62,6 @@ MP_DEFINE_CONST_OBJ_TYPE(
+ //| PM_DISABLED: int
+ //| """Disable power management and always use highest power mode. CircuitPython sets this value at reset time, because it provides the best connectivity reliability."""
+ //|
+-//|
+ //| def set_power_management(value: int) -> None:
+ //|     """Set the power management register
+ //|
+@@ -82,7 +91,6 @@ MP_DEFINE_CONST_OBJ_TYPE(
+ //|     usage.
+ //|     """
+ //|
+-//|
+ static mp_obj_t cyw43_set_power_management(const mp_obj_t value_in) {
+     mp_int_t value = mp_obj_get_int(value_in);
+     power_management_value = value;
+@@ -94,7 +102,6 @@ static MP_DEFINE_CONST_FUN_OBJ_1(cyw43_set_power_management_obj, cyw43_set_power
+ //| def get_power_management() -> int:
+ //|     """Retrieve the power management register"""
+ //|
+-//|
+ static mp_obj_t cyw43_get_power_management() {
+     return mp_obj_new_int(power_management_value);
+ }
+diff --git a/ports/raspberrypi/bindings/cyw43/__init__.h b/ports/raspberrypi/bindings/cyw43/__init__.h
+index 51657b075d..e2a3bb01b3 100644
+--- a/ports/raspberrypi/bindings/cyw43/__init__.h
++++ b/ports/raspberrypi/bindings/cyw43/__init__.h
+@@ -33,4 +33,5 @@ const mcu_pin_obj_t *validate_obj_is_pin_including_cyw43(mp_obj_t obj, qstr arg_
+ #define PM_DISABLED CONSTANT_CYW43_PM_VALUE(CYW43_NO_POWERSAVE_MODE, 200, 1, 1, 10)
+ 
+ extern void bindings_cyw43_wifi_enforce_pm(void);
+-void cyw43_enter_deep_sleep(void);
++extern void bindings_cyw43_power_down(void);
++extern bool bindings_cyw43_power_up(void);
+diff --git a/ports/raspberrypi/common-hal/alarm/__init__.c b/ports/raspberrypi/common-hal/alarm/__init__.c
+index c47ddc3150..53d5891686 100644
+--- a/ports/raspberrypi/common-hal/alarm/__init__.c
++++ b/ports/raspberrypi/common-hal/alarm/__init__.c
+@@ -4,6 +4,9 @@
+ //
+ // SPDX-License-Identifier: MIT
+ 
++#include <stdio.h>
++#include <inttypes.h>
++
+ #include "py/gc.h"
+ #include "py/obj.h"
+ #include "py/objtuple.h"
+@@ -20,10 +23,12 @@
+ 
+ #if CIRCUITPY_CYW43
+ #include "bindings/cyw43/__init__.h"
++#include "common-hal/wifi/__init__.h"
+ #endif
+ 
+ #include "supervisor/port.h"
+ #include "supervisor/shared/workflow.h"
++#include "supervisor/shared/serial.h"  // serial_connected()
+ 
+ #include "pico/stdlib.h"
+ #include "hardware/sync.h"
+@@ -32,43 +37,303 @@
+ #include "hardware/structs/scb.h"
+ #include "hardware/watchdog.h"
+ #include "hardware/structs/watchdog.h"
+-
+-// XOSC shutdown
+-#include "hardware/rtc.h"
+ #include "hardware/pll.h"
+ #include "hardware/regs/io_bank0.h"
+ 
++#ifdef PICO_RP2350
++#include "hardware/powman.h"
++#endif
++
++#include "pico.h"
++#include "pico/runtime_init.h"
++#include "hardware/regs/clocks.h"
++#include "rosc.h"
++
++#ifdef __riscv
++#include "hardware/riscv.h"
++#endif
++
++#ifdef SLEEP_DEBUG
++#include "py/mpprint.h"
++#include "py/mphal.h"
++#define DEBUG_PRINT(fmt, ...) ((void)mp_printf(&mp_plat_print, "DBG:%s:%04d: " fmt "\n", __FILE__, __LINE__,##__VA_ARGS__))
++#define SLEEP(ms) mp_hal_delay_ms(ms)
++#else
++#define DEBUG_PRINT(fmt, ...)((void)0)
++#define SLEEP(ms)((void)0)
++#endif
++
++// This module uses code from pico-extras/src/rp2_common/pico_sleep.[ch]
++// Naming conventions in the source is not uniform. Here, all functions
++// from sleep.c are prefixed with _sleep. The functions are not 1:1 copies,
++// since some of the coding is already part of e.g. time/TimeAlarm.c or
++// pin/PinAlarm.c.
++//
++// Additional code (rosc.[cħ]) is from pico-extras/src/rp2_common/hardware_rosc.
++// Since pico-extras is currently not pulled in as a submodule, these
++// two files are copied into common-hal/alarm and used as is.
++//
++// The pico-SDK/pico-extras use the two terms "sleep" and "dormant", that
++// are not identical to the terms "light-sleep" and "deep-sleep" from CP.
++//
++// The main difference between sleep and dormant is that the latter stops
++// all clocks, preventing time-based alarms to fire. At least for the RP2040.
++// The RP2350 gained a third clock "lposc", that allows dormant-mode with
++// time-based alarms.
++
++typedef enum {
++    DORMANT_SOURCE_NONE,
++    DORMANT_SOURCE_XOSC,
++    DORMANT_SOURCE_ROSC,
++    DORMANT_SOURCE_LPOSC, // rp2350 only
++} dormant_source_t;
++
++static void _sleep_run_from_dormant_source(dormant_source_t dormant_source);
++
++static inline void _sleep_run_from_xosc(void) {
++    _sleep_run_from_dormant_source(DORMANT_SOURCE_XOSC);
++}
++
++#ifdef PICO_RP2350
++static inline void _sleep_run_from_lposc(void) {
++    _sleep_run_from_dormant_source(DORMANT_SOURCE_LPOSC);
++}
++#endif
++
++static dormant_source_t _dormant_source;
++
++// State of the serial connection
++static bool _serial_connected;
++
++// In order to go into dormant mode we need to be running from a stoppable clock source:
++// either the xosc or rosc with no PLLs running. This means we disable the USB and ADC clocks
++// and all PLLs
++static void _sleep_run_from_dormant_source(dormant_source_t dormant_source) {
++    _dormant_source = dormant_source;
++
++    uint src_hz;
++    uint clk_ref_src;
++    switch (dormant_source) {
++        case DORMANT_SOURCE_XOSC:
++            src_hz = XOSC_HZ;
++            clk_ref_src = CLOCKS_CLK_REF_CTRL_SRC_VALUE_XOSC_CLKSRC;
++            break;
++        case DORMANT_SOURCE_ROSC:
++            src_hz = 6500 * KHZ; // todo
++            clk_ref_src = CLOCKS_CLK_REF_CTRL_SRC_VALUE_ROSC_CLKSRC_PH;
++            break;
++        #ifdef PICO_RP2350
++        case DORMANT_SOURCE_LPOSC:
++            src_hz = 32 * KHZ;
++            clk_ref_src = CLOCKS_CLK_REF_CTRL_SRC_VALUE_LPOSC_CLKSRC;
++            break;
++        #endif
++        default:
++            hard_assert(false);
++    }
++
++    // CLK_REF = XOSC or ROSC
++    clock_configure(clk_ref,
++        clk_ref_src,
++        0,             // No aux mux
++        src_hz,
++        src_hz);
++
++    // CLK SYS = CLK_REF
++    clock_configure(clk_sys,
++        CLOCKS_CLK_SYS_CTRL_SRC_VALUE_CLK_REF,
++        0,             // Using glitchless mux
++        src_hz,
++        src_hz);
++
++    // CLK ADC = 0MHz
++    clock_stop(clk_adc);
++    clock_stop(clk_usb);
++    #ifdef PICO_RP2350
++    clock_stop(clk_hstx);
++    #endif
++
++    #ifdef PICO_RP2040
++    // CLK RTC = ideally XOSC (12MHz) / 256 = 46875Hz but could be rosc
++    uint clk_rtc_src = (dormant_source == DORMANT_SOURCE_XOSC) ?
++        CLOCKS_CLK_RTC_CTRL_AUXSRC_VALUE_XOSC_CLKSRC :
++        CLOCKS_CLK_RTC_CTRL_AUXSRC_VALUE_ROSC_CLKSRC_PH;
++
++    clock_configure(clk_rtc,
++        0,             // No GLMUX
++        clk_rtc_src,
++        src_hz,
++        46875);
++    #endif
++
++    // CLK PERI = clk_sys. Used as reference clock for Peripherals. No dividers so just select and enable
++    clock_configure(clk_peri,
++        0,
++        CLOCKS_CLK_PERI_CTRL_AUXSRC_VALUE_CLK_SYS,
++        src_hz,
++        src_hz);
++
++    pll_deinit(pll_sys);
++    pll_deinit(pll_usb);
++
++    // Assuming both xosc and rosc are running at the moment
++    if (dormant_source == DORMANT_SOURCE_XOSC) {
++        // Can disable rosc
++        rosc_disable();
++    } else {
++        // Can disable xosc
++        xosc_disable();
++    }
++}
++
++static void _sleep_processor_deep_sleep(void) {
++    // Enable deep sleep at the proc
++    #ifdef __riscv
++    uint32_t bits = RVCSR_MSLEEP_POWERDOWN_BITS;
++    if (!get_core_num()) {
++        bits |= RVCSR_MSLEEP_DEEPSLEEP_BITS;
++    }
++    riscv_set_csr(RVCSR_MSLEEP_OFFSET, bits);
++    #else
++    scb_hw->scr |= ARM_CPU_PREFIXED(SCR_SLEEPDEEP_BITS);
++    #endif
++}
++
++// saved values of the clocks
++uint32_t _saved_sleep_en0;
++uint32_t _saved_sleep_en1;
++
++// slightly modified compared to pico-extras, since we set the
++// alarm and callback elsewhere and only use it with RP2040
++#ifdef PICO_RP2040
++static void _sleep_goto_sleep_until(void) {
++    DEBUG_PRINT("_sleep_goto_sleep_until");
++    SLEEP(10);
++
++    _saved_sleep_en0 = clocks_hw->sleep_en0;
++    _saved_sleep_en1 = clocks_hw->sleep_en1;
++    clocks_hw->sleep_en0 = CLOCKS_SLEEP_EN0_CLK_RTC_RTC_BITS;
++    clocks_hw->sleep_en1 = 0x0;
++
++    // Enable deep sleep at the proc
++    _sleep_processor_deep_sleep();
++
++    // Go to sleep
++    __wfi();
++}
++#endif
++
++static void _sleep_go_dormant(void) {
++    if (_dormant_source == DORMANT_SOURCE_XOSC) {
++        xosc_dormant();
++    } else {
++        rosc_set_dormant();
++    }
++    // at this point we are in dormant state
++}
++
++#ifdef PICO_RP2350
++// slightly modified compared to pico-extras, since we set the
++// alarm and callback elsewhere. We also don't expect this to work
++// for the RP2040 (no external crystal)
++static void _sleep_goto_dormant_until(void) {
++    // We should have already called the _sleep_run_from_dormant_source function
++
++    assert(_dormant_source == DORMANT_SOURCE_LPOSC);
++    uint64_t restore_ms = powman_timer_get_ms();
++    powman_timer_set_1khz_tick_source_lposc();
++    powman_timer_set_ms(restore_ms);
++
++    _saved_sleep_en0 = clocks_hw->sleep_en0;
++    _saved_sleep_en1 = clocks_hw->sleep_en1;
++    clocks_hw->sleep_en0 = CLOCKS_SLEEP_EN0_CLK_REF_POWMAN_BITS;
++    clocks_hw->sleep_en1 = 0x0;
++
++    // Enable deep sleep at the proc
++    _sleep_processor_deep_sleep();
++
++    // Go dormant
++    // _sleep_go_dormant();  (not here, moved to _goto_sleep_or_dormant)
++}
++#endif
++
++// To be called after waking up from sleep/dormant mode to restore system clocks properly
++static void _sleep_power_up(void) {
++    // Re-enable the ring oscillator, which will essentially kickstart the proc
++    rosc_enable();
++
++    // Reset the sleep enable register so peripherals and other hardware can be used
++    clocks_hw->sleep_en0 = _saved_sleep_en0;
++    clocks_hw->sleep_en1 = _saved_sleep_en1;
++
++    // Restore all clocks
++    clocks_init();
++
++    #ifdef PICO_RP2350
++    // make powerman use xosc again
++    uint64_t restore_ms = powman_timer_get_ms();
++    powman_timer_set_1khz_tick_source_xosc();
++    powman_timer_set_ms(restore_ms);
++    #endif
++
++    #if CIRCUITPY_CYW43
++    bindings_cyw43_power_up();
++    wifi_power_up_reset();
++    #endif
++}
++
++// enter sleep or dormant mode
++// There are the following different cases:
++//   - RP2040: TimeAlarm -> use sleep with aon-wakeup
++//             PinAlarm  -> use dormant with gpio-wakeup
++//   - RP2350: TimeAlarm -> use dormant with aon-wakeup
++//             PinAlarm  -> use dormant with gpio-wakeup
++//
++// The low-level implementation does not differentiate between light-sleep
++// and deep-sleep.
++static void _goto_sleep_or_dormant(void) {
++    DEBUG_PRINT("_goto_sleep_or_dormant");
++    bool timealarm_set = alarm_time_timealarm_is_set();
++    _serial_connected = serial_connected();
++    DEBUG_PRINT("time-alarm: %s", timealarm_set ? "true": "false");
++    DEBUG_PRINT("serial: %s", _serial_connected ? "true": "false");
++    SLEEP(10);
++
++    // Just before sleep, enable the pinalarm interrupt.
++    alarm_pin_pinalarm_entering_deep_sleep();
++
++    // when serial is connected, only fake sleep/dormant
++    if (_serial_connected) {
++        __wfi();
++        return;
++    }
++
++    #if CIRCUITPY_CYW43
++    bindings_cyw43_power_down();
++    #endif
++
++    #ifdef PICO_RP2040
++    _sleep_run_from_xosc();     // calls _sleep_run_from_dormant_source
++    if (timealarm_set) {
++        _sleep_goto_sleep_until();
++    } else {
++        _sleep_go_dormant();
++    }
++    _sleep_power_up();
++    #else
++    _sleep_run_from_lposc();
++    if (timealarm_set) {
++        _sleep_goto_dormant_until();
++    }
++    _sleep_go_dormant();
++    _sleep_power_up();
++    #endif
++}
++
+ // Watchdog scratch register
+ // Not used elsewhere in the SDK for now, keep an eye on it
+ #define RP_WKUP_SCRATCH_REG 0
+ 
+-// Light sleep turns off nonvolatile Busio and other wake-only peripherals
+-// TODO: this only saves about 2mA right now, expand with other non-essentials
+-const uint32_t RP_LIGHTSLEEP_EN0_MASK = ~(
+-    CLOCKS_SLEEP_EN0_CLK_SYS_SPI1_BITS |
+-    CLOCKS_SLEEP_EN0_CLK_PERI_SPI1_BITS |
+-    CLOCKS_SLEEP_EN0_CLK_SYS_SPI0_BITS |
+-    CLOCKS_SLEEP_EN0_CLK_PERI_SPI0_BITS |
+-    CLOCKS_SLEEP_EN0_CLK_SYS_PWM_BITS |
+-    CLOCKS_SLEEP_EN0_CLK_SYS_PIO1_BITS |
+-    CLOCKS_SLEEP_EN0_CLK_SYS_PIO0_BITS |
+-    CLOCKS_SLEEP_EN0_CLK_SYS_I2C1_BITS |
+-    CLOCKS_SLEEP_EN0_CLK_SYS_I2C0_BITS |
+-    CLOCKS_SLEEP_EN0_CLK_SYS_ADC_BITS |
+-    CLOCKS_SLEEP_EN0_CLK_ADC_ADC_BITS
+-    );
+-// This bank has the USB clocks in it, leave it for now
+-const uint32_t RP_LIGHTSLEEP_EN1_MASK = CLOCKS_SLEEP_EN1_RESET;
+-
+-// Light sleeps used for TimeAlarm deep sleep turn off almost everything
+-const uint32_t RP_LIGHTSLEEP_EN0_MASK_HARSH = (
+-    CLOCKS_SLEEP_EN0_CLK_RTC_RTC_BITS |
+-    CLOCKS_SLEEP_EN0_CLK_SYS_PADS_BITS
+-    );
+-const uint32_t RP_LIGHTSLEEP_EN1_MASK_HARSH = 0x0;
+-
+-static void prepare_for_dormant_xosc(void);
+-
+ // Singleton instance of SleepMemory.
+ const alarm_sleep_memory_obj_t alarm_sleep_memory_obj = {
+     .base = {
+@@ -81,6 +346,8 @@ const alarm_sleep_memory_obj_t alarm_sleep_memory_obj = {
+ alarm_wake_alarm_union_t alarm_wake_alarm;
+ 
+ void alarm_reset(void) {
++    DEBUG_PRINT("alarm_reset");
++    SLEEP(10);
+     alarm_sleep_memory_reset();
+     alarm_pin_pinalarm_reset();
+     alarm_time_timealarm_reset();
+@@ -92,9 +359,13 @@ void alarm_reset(void) {
+ static uint8_t _get_wakeup_cause(void) {
+     // First check if the modules remember what last woke up
+     if (alarm_pin_pinalarm_woke_this_cycle()) {
++        DEBUG_PRINT("_get_wakeup_cause: pin-alarm");
++        SLEEP(10);
+         return RP_SLEEP_WAKEUP_GPIO;
+     }
+     if (alarm_time_timealarm_woke_this_cycle()) {
++        DEBUG_PRINT("_get_wakeup_cause: time-alarm");
++        SLEEP(10);
+         return RP_SLEEP_WAKEUP_RTC;
+     }
+     // If waking from true deep sleep, modules will have lost their state,
+@@ -107,8 +378,11 @@ static uint8_t _get_wakeup_cause(void) {
+ 
+ // Set up light sleep or deep sleep alarms.
+ static void _setup_sleep_alarms(bool deep_sleep, size_t n_alarms, const mp_obj_t *alarms) {
++    DEBUG_PRINT("_setup_sleep_alarms (start)");
+     alarm_pin_pinalarm_set_alarms(deep_sleep, n_alarms, alarms);
+     alarm_time_timealarm_set_alarms(deep_sleep, n_alarms, alarms);
++    DEBUG_PRINT("_setup_sleep_alarms (finished)");
++    SLEEP(10);
+ }
+ 
+ bool common_hal_alarm_woken_from_sleep(void) {
+@@ -137,14 +411,12 @@ mp_obj_t common_hal_alarm_record_wake_alarm(void) {
+ }
+ 
+ mp_obj_t common_hal_alarm_light_sleep_until_alarms(size_t n_alarms, const mp_obj_t *alarms) {
++    DEBUG_PRINT("common_hal_alarm_light_sleep_until_alarms (start)");
++    SLEEP(10);
+     _setup_sleep_alarms(false, n_alarms, alarms);
+ 
+     mp_obj_t wake_alarm = mp_const_none;
+ 
+-    // Save current clocks.
+-    uint32_t saved_sleep_en0 = clocks_hw->sleep_en0;
+-    uint32_t saved_sleep_en1 = clocks_hw->sleep_en1;
+-
+     while (!mp_hal_is_interrupted()) {
+         RUN_BACKGROUND_TASKS;
+         // Detect if interrupt was alarm or ctrl-C interrupt.
+@@ -166,26 +438,13 @@ mp_obj_t common_hal_alarm_light_sleep_until_alarms(size_t n_alarms, const mp_obj
+             shared_alarm_save_wake_alarm(wake_alarm);
+             break;
+         }
+-
+-        // Prune the clocks for sleep.
+-        clocks_hw->sleep_en0 &= RP_LIGHTSLEEP_EN0_MASK;
+-        clocks_hw->sleep_en1 = RP_LIGHTSLEEP_EN1_MASK;
+-
+-        // Enable System Control Block (SCB) deep sleep
+-        scb_hw->scr |= M0PLUS_SCR_SLEEPDEEP_BITS;
+-
+-        __wfi();
++        _goto_sleep_or_dormant();
+     }
+ 
+-    // Restore clocks so other wfi() uses, like time.sleep(), won't use the light-sleep settings.
+-    clocks_hw->sleep_en0 = saved_sleep_en0;
+-    clocks_hw->sleep_en1 = saved_sleep_en1;
+-
+     if (mp_hal_is_interrupted()) {
+         return mp_const_none; // Shouldn't be given to python code because exception handling should kick in.
+     }
+ 
+-
+     alarm_reset();
+     return wake_alarm;
+ }
+@@ -198,67 +457,15 @@ void common_hal_alarm_set_deep_sleep_alarms(size_t n_alarms, const mp_obj_t *ala
+ }
+ 
+ void NORETURN common_hal_alarm_enter_deep_sleep(void) {
+-    bool timealarm_set = alarm_time_timealarm_is_set();
+ 
+-    #if CIRCUITPY_CYW43
+-    cyw43_enter_deep_sleep();
+-    #endif
+-
+-    // If there's a timealarm, just enter a very deep light sleep
+-    if (timealarm_set) {
+-        // Prune the clock for sleep
+-        clocks_hw->sleep_en0 &= RP_LIGHTSLEEP_EN0_MASK_HARSH;
+-        clocks_hw->sleep_en1 = RP_LIGHTSLEEP_EN1_MASK_HARSH;
+-        // Enable System Control Block (SCB) deep sleep
+-        uint save = scb_hw->scr;
+-        scb_hw->scr = save | M0PLUS_SCR_SLEEPDEEP_BITS;
+-        __wfi();
+-    } else {
+-        prepare_for_dormant_xosc();
+-        xosc_dormant();
+-    }
+-    // // TODO: support ROSC when available in SDK
+-    // rosc_set_dormant();
++    _goto_sleep_or_dormant();
+ 
+     // Reset uses the watchdog. Use scratch registers to store wake reason
+     watchdog_hw->scratch[RP_WKUP_SCRATCH_REG] = _get_wakeup_cause();
+ 
+-    // Just before reset, enable the pinalarm interrupt.
+-    alarm_pin_pinalarm_entering_deep_sleep();
+     reset_cpu();
+ }
+ 
+ void common_hal_alarm_gc_collect(void) {
+     gc_collect_ptr(shared_alarm_get_wake_alarm());
+ }
+-
+-static void prepare_for_dormant_xosc(void) {
+-    // TODO: add ROSC support with sleep_run_from_dormant_source when it's added to SDK
+-    uint src_hz = XOSC_MHZ * MHZ;
+-    uint clk_ref_src = CLOCKS_CLK_REF_CTRL_SRC_VALUE_XOSC_CLKSRC;
+-    clock_configure(clk_ref,
+-        clk_ref_src,
+-        0,         // No aux mux
+-        src_hz,
+-        src_hz);
+-    clock_configure(clk_sys,
+-        CLOCKS_CLK_SYS_CTRL_SRC_VALUE_CLK_REF,
+-        0,             // Using glitchless mux
+-        src_hz,
+-        src_hz);
+-    clock_stop(clk_usb);
+-    clock_stop(clk_adc);
+-    uint clk_rtc_src = CLOCKS_CLK_RTC_CTRL_AUXSRC_VALUE_XOSC_CLKSRC;
+-    clock_configure(clk_rtc,
+-        0,         // No GLMUX
+-        clk_rtc_src,
+-        src_hz,
+-        46875);
+-    clock_configure(clk_peri,
+-        0,
+-        CLOCKS_CLK_PERI_CTRL_AUXSRC_VALUE_CLK_SYS,
+-        src_hz,
+-        src_hz);
+-    pll_deinit(pll_sys);
+-    pll_deinit(pll_usb);
+-}
+diff --git a/ports/raspberrypi/common-hal/alarm/pin/PinAlarm.c b/ports/raspberrypi/common-hal/alarm/pin/PinAlarm.c
+index ecebb07277..b4a104391f 100644
+--- a/ports/raspberrypi/common-hal/alarm/pin/PinAlarm.c
++++ b/ports/raspberrypi/common-hal/alarm/pin/PinAlarm.c
+@@ -30,7 +30,7 @@ static void gpio_callback(uint gpio, uint32_t events) {
+ 
+     if (_not_yet_deep_sleeping) {
+         // Event went off prematurely, before we went to sleep, so set it again.
+-        gpio_set_irq_enabled(gpio, events, false);
++        gpio_set_irq_enabled(gpio, events, true);
+     } else {
+         // Went off during sleep.
+         // Disable IRQ automatically.
+@@ -97,7 +97,11 @@ void alarm_pin_pinalarm_reset(void) {
+     woke_up = false;
+ 
+     // Clear all GPIO interrupts
++    #ifdef PICO_RP2040
+     for (uint8_t i = 0; i < 4; i++) {
++    #else
++    for (uint8_t i = 0; i < 6; i++) {
++        #endif
+         iobank0_hw->intr[i] = 0;
+     }
+ 
+@@ -105,6 +109,7 @@ void alarm_pin_pinalarm_reset(void) {
+     for (size_t i = 0; i < NUM_BANK0_GPIOS; i++) {
+         if (alarm_reserved_pins & (1 << i)) {
+             gpio_set_irq_enabled(i, GPIO_IRQ_ALL_EVENTS, false);
++            gpio_set_dormant_irq_enabled(i, GPIO_IRQ_ALL_EVENTS, false);
+             reset_pin_number(i);
+         }
+     }
+@@ -141,9 +146,7 @@ void alarm_pin_pinalarm_set_alarms(bool deep_sleep, size_t n_alarms, const mp_ob
+             }
+ 
+             gpio_set_irq_enabled_with_callback((uint)alarm->pin->number, event, true, &gpio_callback);
+-            if (deep_sleep) {
+-                gpio_set_dormant_irq_enabled((uint)alarm->pin->number, event, true);
+-            }
++            gpio_set_dormant_irq_enabled((uint)alarm->pin->number, event, true);
+ 
+             _not_yet_deep_sleeping = true;
+         }
+diff --git a/ports/raspberrypi/common-hal/alarm/rosc.c b/ports/raspberrypi/common-hal/alarm/rosc.c
+new file mode 100644
+index 0000000000..05a18c0d05
+--- /dev/null
++++ b/ports/raspberrypi/common-hal/alarm/rosc.c
+@@ -0,0 +1,75 @@
++/*
++ * Copyright (c) 2020 Raspberry Pi (Trading) Ltd.
++ *
++ * SPDX-License-Identifier: BSD-3-Clause
++ */
++
++#include "pico.h"
++
++// For MHZ definitions etc
++#include "hardware/clocks.h"
++#include "rosc.h"
++
++// Given a ROSC delay stage code, return the next-numerically-higher code.
++// Top result bit is set when called on maximum ROSC code.
++uint32_t next_rosc_code(uint32_t code) {
++    return ((code | 0x08888888u) + 1u) & 0xf7777777u;
++}
++
++uint rosc_find_freq(uint32_t low_mhz, uint32_t high_mhz) {
++    // TODO: This could be a lot better
++    rosc_set_div(1);
++    for (uint32_t code = 0; code <= 0x77777777u; code = next_rosc_code(code)) {
++        rosc_set_freq(code);
++        uint rosc_mhz = frequency_count_khz(CLOCKS_FC0_SRC_VALUE_ROSC_CLKSRC) / 1000;
++        if ((rosc_mhz >= low_mhz) && (rosc_mhz <= high_mhz)) {
++            return rosc_mhz;
++        }
++    }
++    return 0;
++}
++
++void rosc_set_div(uint32_t div) {
++    assert(div <= 31 && div >= 1);
++    rosc_write(&rosc_hw->div, ROSC_DIV_VALUE_PASS + div);
++}
++
++void rosc_set_freq(uint32_t code) {
++    rosc_write(&rosc_hw->freqa, (ROSC_FREQA_PASSWD_VALUE_PASS << ROSC_FREQA_PASSWD_LSB) | (code & 0xffffu));
++    rosc_write(&rosc_hw->freqb, (ROSC_FREQA_PASSWD_VALUE_PASS << ROSC_FREQA_PASSWD_LSB) | (code >> 16u));
++}
++
++void rosc_set_range(uint range) {
++    // Range should use enumvals from the headers and thus have the password correct
++    rosc_write(&rosc_hw->ctrl, (ROSC_CTRL_ENABLE_VALUE_ENABLE << ROSC_CTRL_ENABLE_LSB) | range);
++}
++
++void rosc_disable(void) {
++    uint32_t tmp = rosc_hw->ctrl;
++    tmp &= (~ROSC_CTRL_ENABLE_BITS);
++    tmp |= (ROSC_CTRL_ENABLE_VALUE_DISABLE << ROSC_CTRL_ENABLE_LSB);
++    rosc_write(&rosc_hw->ctrl, tmp);
++    // Wait for stable to go away
++    while (rosc_hw->status & ROSC_STATUS_STABLE_BITS) {
++        ;
++    }
++}
++
++void rosc_set_dormant(void) {
++    // WARNING: This stops the rosc until woken up by an irq
++    rosc_write(&rosc_hw->dormant, ROSC_DORMANT_VALUE_DORMANT);
++    // Wait for it to become stable once woken up
++    while (!(rosc_hw->status & ROSC_STATUS_STABLE_BITS)) {
++        ;
++    }
++}
++
++void rosc_enable(void) {
++    // Re-enable the rosc
++    rosc_write(&rosc_hw->ctrl, ROSC_CTRL_ENABLE_BITS);
++
++    // Wait for it to become stable once restarted
++    while (!(rosc_hw->status & ROSC_STATUS_STABLE_BITS)) {
++        ;
++    }
++}
+diff --git a/ports/raspberrypi/common-hal/alarm/rosc.h b/ports/raspberrypi/common-hal/alarm/rosc.h
+new file mode 100644
+index 0000000000..c4cb9aaa29
+--- /dev/null
++++ b/ports/raspberrypi/common-hal/alarm/rosc.h
+@@ -0,0 +1,92 @@
++/*
++ * Copyright (c) 2020 Raspberry Pi (Trading) Ltd.
++ *
++ * SPDX-License-Identifier: BSD-3-Clause
++ */
++
++#ifndef _HARDWARE_ROSC_H_
++#define _HARDWARE_ROSC_H_
++
++#include "pico.h"
++#include "hardware/structs/rosc.h"
++
++#ifdef __cplusplus
++extern "C" {
++#endif
++
++/** \file rosc.h
++ *  \defgroup hardware_rosc hardware_rosc
++ *
++ * Ring Oscillator (ROSC) API
++ *
++ * A Ring Oscillator is an on-chip oscillator that requires no external crystal. Instead, the output is generated from a series of
++ * inverters that are chained together to create a feedback loop. RP2040 boots from the ring oscillator initially, meaning the
++ * first stages of the bootrom, including booting from SPI flash, will be clocked by the ring oscillator. If your design has a
++ * crystal oscillator, you’ll likely want to switch to this as your reference clock as soon as possible, because the frequency is
++ * more accurate than the ring oscillator.
++ */
++
++/*! \brief  Set frequency of the Ring Oscillator
++ *  \ingroup hardware_rosc
++ *
++ * \param code The drive strengths. See the RP2040 datasheet for information on this value.
++ */
++void rosc_set_freq(uint32_t code);
++
++/*! \brief  Set range of the Ring Oscillator
++ *  \ingroup hardware_rosc
++ *
++ * Frequency range. Frequencies will vary with Process, Voltage & Temperature (PVT).
++ * Clock output will not glitch when changing the range up one step at a time.
++ *
++ * \param range 0x01 Low, 0x02 Medium, 0x03 High, 0x04 Too High.
++ */
++void rosc_set_range(uint range);
++
++/*! \brief  Disable the Ring Oscillator
++ *  \ingroup hardware_rosc
++ *
++ */
++void rosc_disable(void);
++
++/*! \brief  Put Ring Oscillator in to dormant mode.
++ *  \ingroup hardware_rosc
++ *
++ * The ROSC supports a dormant mode,which stops oscillation until woken up up by an asynchronous interrupt.
++ * This can either come from the RTC, being clocked by an external clock, or a GPIO pin going high or low.
++ * If no IRQ is configured before going into dormant mode the ROSC will never restart.
++ *
++ * PLLs should be stopped before selecting dormant mode.
++ */
++void rosc_set_dormant(void);
++
++// FIXME: Add doxygen
++
++uint32_t next_rosc_code(uint32_t code);
++
++uint rosc_find_freq(uint32_t low_mhz, uint32_t high_mhz);
++
++void rosc_set_div(uint32_t div);
++
++inline static void rosc_clear_bad_write(void) {
++    hw_clear_bits(&rosc_hw->status, ROSC_STATUS_BADWRITE_BITS);
++}
++
++inline static bool rosc_write_okay(void) {
++    return !(rosc_hw->status & ROSC_STATUS_BADWRITE_BITS);
++}
++
++inline static void rosc_write(io_rw_32 *addr, uint32_t value) {
++    rosc_clear_bad_write();
++    assert(rosc_write_okay());
++    *addr = value;
++    assert(rosc_write_okay());
++};
++
++void rosc_enable(void);
++
++#ifdef __cplusplus
++}
++#endif
++
++#endif
+diff --git a/ports/raspberrypi/common-hal/alarm/time/TimeAlarm.c b/ports/raspberrypi/common-hal/alarm/time/TimeAlarm.c
+index 1f7c3f9eda..fef8ac23d1 100644
+--- a/ports/raspberrypi/common-hal/alarm/time/TimeAlarm.c
++++ b/ports/raspberrypi/common-hal/alarm/time/TimeAlarm.c
+@@ -4,21 +4,30 @@
+ //
+ // SPDX-License-Identifier: MIT
+ 
+-#include "py/runtime.h"
++#include <sys/time.h>
+ 
++#include "py/runtime.h"
+ #include "shared-bindings/alarm/__init__.h"
+ #include "shared-bindings/alarm/time/TimeAlarm.h"
+ #include "shared-bindings/time/__init__.h"
+ 
+ #include "shared/timeutils/timeutils.h"
+ 
+-#include "hardware/gpio.h"
+-#include "hardware/rtc.h"
++#include "pico/aon_timer.h"
++
++#ifdef SLEEP_DEBUG
++#include <inttypes.h>
++#include "py/mpprint.h"
++#define DEBUG_PRINT(fmt, ...) ((void)mp_printf(&mp_plat_print, "DBG:%s:%04d: " fmt "\n", __FILE__, __LINE__,##__VA_ARGS__))
++#else
++#define DEBUG_PRINT(fmt, ...)((void)0)
++#endif
+ 
+ static bool woke_up = false;
+ static bool _timealarm_set = false;
+ 
+ static void timer_callback(void) {
++    DEBUG_PRINT("AON Timer woke us up");
+     woke_up = true;
+ }
+ 
+@@ -53,57 +62,57 @@ bool alarm_time_timealarm_woke_this_cycle(void) {
+ }
+ 
+ void alarm_time_timealarm_reset(void) {
+-    rtc_disable_alarm();
++    aon_timer_disable_alarm();
+     woke_up = false;
+ }
+ 
+ void alarm_time_timealarm_set_alarms(bool deep_sleep, size_t n_alarms, const mp_obj_t *alarms) {
+-    bool timealarm_set = false;
++    _timealarm_set = false;
+     alarm_time_timealarm_obj_t *timealarm = MP_OBJ_NULL;
+ 
+     for (size_t i = 0; i < n_alarms; i++) {
+         if (!mp_obj_is_type(alarms[i], &alarm_time_timealarm_type)) {
+             continue;
+         }
+-        if (timealarm_set) {
++        if (_timealarm_set) {
+             mp_raise_ValueError(MP_ERROR_TEXT("Only one alarm.time alarm can be set."));
+         }
+         timealarm = MP_OBJ_TO_PTR(alarms[i]);
+-        timealarm_set = true;
++        _timealarm_set = true;
+     }
+-    if (!timealarm_set) {
++    if (!_timealarm_set) {
+         return;
+     }
+-    if (deep_sleep) {
+-        _timealarm_set = true;
+-    }
+ 
+     // Compute how long to actually sleep, considering the time now.
+     mp_float_t mono_seconds_to_date = uint64_to_float(common_hal_time_monotonic_ms()) / 1000.0f;
+     mp_float_t wakeup_in_secs = MAX(0.0f, timealarm->monotonic_time - mono_seconds_to_date);
+-    datetime_t t;
+ 
+-    rtc_get_datetime(&t);
++    uint32_t rtc_seconds_to_date;
++
++    // the SDK suggests not using aon_timer_get_time for the RP2040, because
++    // this inflates the binary size by pulling in local_time_r (496 bytes
++    // according to nm). But since common-hal/rtc/RTC.c also uses
++    // aon_timer_get_time, we use it here too. Any optimization will have to
++    // change this everywhere.
+ 
+-    uint32_t rtc_seconds_to_date = timeutils_seconds_since_2000(t.year, t.month,
+-        t.day, t.hour, t.min, t.sec);
++    struct timespec t;
++    aon_timer_get_time(&t);
++    rtc_seconds_to_date = t.tv_sec;
++    DEBUG_PRINT("rtc_seconds_to_date: %u", rtc_seconds_to_date);
+ 
+     // The float value is always slightly under, so add 1 to compensate
+     uint32_t alarm_seconds = rtc_seconds_to_date + (uint32_t)wakeup_in_secs + 1;
+-    timeutils_struct_time_t tm;
+-    timeutils_seconds_since_2000_to_struct_time(alarm_seconds, &tm);
+ 
+     // reuse t
+-    t.hour = tm.tm_hour;
+-    t.min = tm.tm_min;
+-    t.sec = tm.tm_sec;
+-    t.day = tm.tm_mday;
+-    t.month = tm.tm_mon;
+-    t.year = tm.tm_year;
+-    t.dotw = (tm.tm_wday + 1) % 7;
+-
+-    rtc_set_alarm(&t, &timer_callback);
+-
++    // also see note above regarding aon_timer_get_time, also true here
++    t.tv_sec = alarm_seconds;
++    DEBUG_PRINT("alarm_seconds: %d", t.tv_sec);
++    #ifdef PICO_RP2040
++    aon_timer_enable_alarm(&t, &timer_callback, deep_sleep);
++    #else
++    aon_timer_enable_alarm(&t, &timer_callback, true);
++    #endif
+     woke_up = false;
+ }
+ 
+diff --git a/ports/raspberrypi/common-hal/wifi/__init__.c b/ports/raspberrypi/common-hal/wifi/__init__.c
+index 5fbe3fe58d..06c9c92bad 100644
+--- a/ports/raspberrypi/common-hal/wifi/__init__.c
++++ b/ports/raspberrypi/common-hal/wifi/__init__.c
+@@ -49,6 +49,19 @@ void common_hal_wifi_init(bool user_initiated) {
+     common_hal_wifi_radio_set_enabled(self, true);
+ }
+ 
++// reset after sleep (called from common-hal/alarm/__init__.c)
++void wifi_power_up_reset(void) {
++    if (!wifi_ever_inited) {
++        // nothing to do
++        return;
++    } else {
++        // start station, regardless if wifi is currently disabled
++        // (enabling does not start station, why?)
++        wifi_radio_obj_t *self = &common_hal_wifi_radio_obj;
++        common_hal_wifi_radio_start_station(self);
++    }
++}
++
+ void wifi_user_reset(void) {
+     if (wifi_user_initiated) {
+         wifi_reset();
+diff --git a/ports/raspberrypi/common-hal/wifi/__init__.h b/ports/raspberrypi/common-hal/wifi/__init__.h
+index 73988e8437..32898d2036 100644
+--- a/ports/raspberrypi/common-hal/wifi/__init__.h
++++ b/ports/raspberrypi/common-hal/wifi/__init__.h
+@@ -11,6 +11,7 @@
+ #include "lwip/ip_addr.h"
+ 
+ void wifi_reset(void);
++void wifi_power_up_reset(void);
+ NORETURN void raise_cyw_error(int err);
+ #define CHECK_CYW_RESULT(x) do { int res = (x); if (res != 0) raise_cyw_error(res); } while (0)
+ 
+diff --git a/ports/raspberrypi/mpconfigport.mk b/ports/raspberrypi/mpconfigport.mk
+index d619e78bd9..7116e41a89 100644
+--- a/ports/raspberrypi/mpconfigport.mk
++++ b/ports/raspberrypi/mpconfigport.mk
+@@ -46,9 +46,10 @@ CIRCUITPY_AUDIOPWMIO ?= 1
+ 
+ CIRCUITPY_AUDIOMIXER ?= 1
+ 
+-ifeq ($(CHIP_VARIANT),RP2040)
+ CIRCUITPY_ALARM ?= 1
+ 
++ifeq ($(CHIP_VARIANT),RP2040)
++
+ # Default PICODVI off because it uses RAM to store code run on the second CPU for RP2040.
+ CIRCUITPY_PICODVI ?= 0
+ 
+@@ -56,8 +57,6 @@ CIRCUITPY_TOUCHIO ?= 1
+ endif
+ 
+ ifeq ($(CHIP_VARIANT),RP2350)
+-# This needs to be implemented.
+-CIRCUITPY_ALARM = 0
+ # Default PICODVI on because it doesn't require much code in RAM to talk to HSTX.
+ CIRCUITPY_PICODVI ?= 1
+ 
+diff --git a/ports/raspberrypi/supervisor/port.c b/ports/raspberrypi/supervisor/port.c
+index 3b7b6d6f6d..e9e54a4d3a 100644
+--- a/ports/raspberrypi/supervisor/port.c
++++ b/ports/raspberrypi/supervisor/port.c
+@@ -27,6 +27,7 @@
+ #endif
+ 
+ #if CIRCUITPY_WIFI
++#include "py/mphal.h"
+ #include "common-hal/wifi/__init__.h"
+ #endif
+ 
+@@ -43,7 +44,7 @@
+ #include "src/rp2_common/hardware_sync/include/hardware/sync.h"
+ #include "src/rp2_common/hardware_timer/include/hardware/timer.h"
+ #if CIRCUITPY_CYW43
+-#include "py/mphal.h"
++#include "bindings/cyw43/__init__.h"
+ #include "pico/cyw43_arch.h"
+ #endif
+ #include "src/common/pico_time/include/pico/time.h"
+@@ -352,9 +353,7 @@ safe_mode_t port_init(void) {
+     // are intended to meet the power on timing requirements, but apparently
+     // are inadequate. We'll back off this long delay based on future testing.
+     mp_hal_delay_ms(1000);
+-    // Change this as a placeholder as to how to init with country code.
+-    // Default country code is CYW43_COUNTRY_WORLDWIDE)
+-    if (cyw43_arch_init_with_country(PICO_CYW43_ARCH_DEFAULT_COUNTRY_CODE)) {
++    if (bindings_cyw43_power_up()) {
+         serial_write("WiFi init failed\n");
+     } else {
+         cyw_ever_init = true;
