@@ -19,6 +19,21 @@ addressing mode.
 Download: [ili9488_waveshare.patch](patches/ili9488_waveshare.patch)
 
 
+RP2xxx Fix-Connect
+------------------
+
+The RP2xxx wifi boards usually need more than one connect attempt. The
+reason is that the code does not honor the timeout-parameter and bails
+out after the first check of the link-status after starting to connect
+asynchronously.
+
+This fix automatically rechecks the link-status during the timeout
+period, either until the timeout expires or until a successful connect
+is detected.
+
+Download: [patches/rp2xxx_fixconnect.patch](patches/rp2xxx_fixconnect.patch)
+
+
 CYW43 Init No Delay
 -------------------
 

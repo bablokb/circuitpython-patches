@@ -1,0 +1,107 @@
+diff --git a/locale/circuitpython.pot b/locale/circuitpython.pot
+index 456f5e698d..22c76a0dea 100644
+--- a/locale/circuitpython.pot
++++ b/locale/circuitpython.pot
+@@ -2889,6 +2884,10 @@ msgstr ""
+ msgid "corrupted file"
+ msgstr ""
+ 
++#: shared-bindings/wifi/Radio.c
++msgid "could not connect to AP"
++msgstr ""
++
+ #: extmod/ulab/code/numpy/poly.c
+ msgid "could not invert Vandermonde matrix"
+ msgstr ""
+diff --git a/locale/de_DE.po b/locale/de_DE.po
+index 56334697e6..c1a966b625 100644
+--- a/locale/de_DE.po
++++ b/locale/de_DE.po
+@@ -1566,6 +1566,10 @@ msgstr "Keine langen Integer (long) unterstützt"
+ msgid "No network with that ssid"
+ msgstr "Kein Netzwerk mit dieser SSID"
+ 
++#: shared-bindings/wifi/Radio.c
++msgid "could not connect to AP"
++msgstr "Verbindung mit AP fehlgeschlagen"
++
+ #: ports/raspberrypi/common-hal/rp2pio/StateMachine.c
+ msgid "No out in program"
+ msgstr "Kein Aus in Programm"
+diff --git a/locale/en_US.po b/locale/en_US.po
+index e9344480c7..fea2bf9b0f 100644
+--- a/locale/en_US.po
++++ b/locale/en_US.po
+@@ -1491,6 +1491,10 @@ msgstr ""
+ msgid "No network with that ssid"
+ msgstr ""
+ 
++#: shared-bindings/wifi/Radio.c
++msgid "could not connect to AP"
++msgstr ""
++
+ #: ports/raspberrypi/common-hal/rp2pio/StateMachine.c
+ msgid "No out in program"
+ msgstr ""
+diff --git a/ports/raspberrypi/common-hal/wifi/Radio.c b/ports/raspberrypi/common-hal/wifi/Radio.c
+index b34a7670b8..a21528b892 100644
+--- a/ports/raspberrypi/common-hal/wifi/Radio.c
++++ b/ports/raspberrypi/common-hal/wifi/Radio.c
+@@ -292,9 +292,6 @@ wifi_radio_error_t common_hal_wifi_radio_connect(wifi_radio_obj_t *self, uint8_t
+         return WIFI_RADIO_ERROR_CONNECTION_FAIL;
+     }
+ 
+-    size_t timeout_ms = timeout <= 0 ? 8000 : (size_t)MICROPY_FLOAT_C_FUN(ceil)(timeout * 1000);
+-    uint64_t start = port_get_raw_ticks(NULL);
+-    uint64_t deadline = start + timeout_ms;
+ 
+     if (connection_unchanged(self, ssid, ssid_len)) {
+         return WIFI_RADIO_ERROR_NONE;
+@@ -308,6 +305,10 @@ wifi_radio_error_t common_hal_wifi_radio_connect(wifi_radio_obj_t *self, uint8_t
+     cyw43_arch_wifi_connect_async((const char *)ssid, (const char *)password, auth_mode);
+     // TODO: Implement authmode check like in espressif
+ 
++    wifi_radio_error_t wifi_error = WIFI_RADIO_ERROR_UNSPECIFIED;
++    size_t timeout_ms = timeout <= 0 ? 8000 : (size_t)MICROPY_FLOAT_C_FUN(ceil)(timeout * 1000);
++    uint64_t start = port_get_raw_ticks(NULL);
++    uint64_t deadline = start + timeout_ms;
+     while (port_get_raw_ticks(NULL) < deadline) {
+         RUN_BACKGROUND_TASKS;
+         if (mp_hal_is_interrupted()) {
+@@ -323,16 +324,19 @@ wifi_radio_error_t common_hal_wifi_radio_connect(wifi_radio_obj_t *self, uint8_t
+                 bindings_cyw43_wifi_enforce_pm();
+                 return WIFI_RADIO_ERROR_NONE;
+             case CYW43_LINK_FAIL:
+-                return WIFI_RADIO_ERROR_CONNECTION_FAIL;
++                wifi_error = WIFI_RADIO_ERROR_CONNECTION_FAIL;
++                continue;
+             case CYW43_LINK_NONET:
+-                return WIFI_RADIO_ERROR_NO_AP_FOUND;
++                wifi_error = WIFI_RADIO_ERROR_NO_AP_FOUND;
++                continue;
+             case CYW43_LINK_BADAUTH:
+-                return WIFI_RADIO_ERROR_AUTH_FAIL;
++                wifi_error = WIFI_RADIO_ERROR_AUTH_FAIL;
++                continue;
+         }
+     }
+ 
+     // Being here means we either timed out or got interrupted.
+-    return WIFI_RADIO_ERROR_UNSPECIFIED;
++    return wifi_error;
+ }
+ 
+ bool common_hal_wifi_radio_get_connected(wifi_radio_obj_t *self) {
+diff --git a/shared-bindings/wifi/Radio.c b/shared-bindings/wifi/Radio.c
+index 57faa7065d..7f09c7d449 100644
+--- a/shared-bindings/wifi/Radio.c
++++ b/shared-bindings/wifi/Radio.c
+@@ -516,6 +516,8 @@ static mp_obj_t wifi_radio_connect(size_t n_args, const mp_obj_t *pos_args, mp_m
+         mp_raise_ConnectionError(MP_ERROR_TEXT("Authentication failure"));
+     } else if (error == WIFI_RADIO_ERROR_NO_AP_FOUND) {
+         mp_raise_ConnectionError(MP_ERROR_TEXT("No network with that ssid"));
++    } else if (error == WIFI_RADIO_ERROR_CONNECTION_FAIL) {
++        mp_raise_ConnectionError(MP_ERROR_TEXT("could not connect to AP"));
+     } else if (error != WIFI_RADIO_ERROR_NONE) {
+         mp_raise_msg_varg(&mp_type_ConnectionError, MP_ERROR_TEXT("Unknown failure %d"), error);
+     }
