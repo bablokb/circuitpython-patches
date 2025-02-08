@@ -58,3 +58,12 @@ and after light-sleep.
 **Note**: this patch already integrates the cyw43_init_nodelay.patch.
 
 Download: [rp2xxx_low_power.patch](patches/rp2xxx_low_power.patch)
+
+
+ESP32AT
+-------
+
+This patch enables <https://github.com/bablokb/circuitpython-esp32at> as
+a submodule and adds it as a frozen module to various boards.
+
+Download: [esp32at.patch](patches/esp32at.patch)
