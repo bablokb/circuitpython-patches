@@ -34,15 +34,6 @@ is detected.
 Download: [patches/rp2xxx_fixconnect.patch](patches/rp2xxx_fixconnect.patch)
 
 
-CYW43 Init No Delay
--------------------
-
-Ths patch removes the 1000ms delay before intialization of the CYW43
-driver. See <https://github.com/adafruit/circuitpython/pull/10038>.
-
-Download: [patches/cyw43_init_nodelay.patch](patches/cyw43_init_nodelay.patch)
-
-
 RP2xxx Low-Power
 ----------------
 
