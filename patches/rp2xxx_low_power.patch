@@ -1,8 +1,8 @@
 diff --git a/ports/raspberrypi/Makefile b/ports/raspberrypi/Makefile
-index cf40af7bab..cf94af056f 100644
+index d1550a386e..835b3b7439 100644
 --- a/ports/raspberrypi/Makefile
 +++ b/ports/raspberrypi/Makefile
-@@ -530,6 +530,7 @@ SRC_C += \
+@@ -531,6 +531,7 @@ SRC_C += \
  	bindings/rp2pio/__init__.c \
  	common-hal/rp2pio/StateMachine.c \
  	common-hal/rp2pio/__init__.c \
@@ -976,7 +976,7 @@ index 73988e8437..32898d2036 100644
  #define CHECK_CYW_RESULT(x) do { int res = (x); if (res != 0) raise_cyw_error(res); } while (0)
  
 diff --git a/ports/raspberrypi/mpconfigport.mk b/ports/raspberrypi/mpconfigport.mk
-index d619e78bd9..7116e41a89 100644
+index bb4e183461..11466a81cd 100644
 --- a/ports/raspberrypi/mpconfigport.mk
 +++ b/ports/raspberrypi/mpconfigport.mk
 @@ -46,9 +46,10 @@ CIRCUITPY_AUDIOPWMIO ?= 1
@@ -991,7 +991,7 @@ index d619e78bd9..7116e41a89 100644
  # Default PICODVI off because it uses RAM to store code run on the second CPU for RP2040.
  CIRCUITPY_PICODVI ?= 0
  
-@@ -56,8 +57,6 @@ CIRCUITPY_TOUCHIO ?= 1
+@@ -59,8 +60,6 @@ CIRCUITPY_CYW43_INIT_DELAY ?= 1000
  endif
  
  ifeq ($(CHIP_VARIANT),RP2350)
@@ -1001,7 +1001,7 @@ index d619e78bd9..7116e41a89 100644
  CIRCUITPY_PICODVI ?= 1
  
 diff --git a/ports/raspberrypi/supervisor/port.c b/ports/raspberrypi/supervisor/port.c
-index 3b7b6d6f6d..000ae254bd 100644
+index 026d9f629c..5ba9cc1fa3 100644
 --- a/ports/raspberrypi/supervisor/port.c
 +++ b/ports/raspberrypi/supervisor/port.c
 @@ -43,7 +43,7 @@
@@ -1013,15 +1013,10 @@ index 3b7b6d6f6d..000ae254bd 100644
  #include "pico/cyw43_arch.h"
  #endif
  #include "src/common/pico_time/include/pico/time.h"
-@@ -347,14 +347,7 @@ safe_mode_t port_init(void) {
-     // Check brownout.
+@@ -363,9 +363,7 @@ safe_mode_t port_init(void) {
+     // are inadequate. We'll back off this long delay based on future testing.
+     mp_hal_delay_ms(CIRCUITPY_CYW43_INIT_DELAY);
  
-     #if CIRCUITPY_CYW43
--    // A small number of samples of pico w need an additional delay before
--    // initializing the cyw43 chip. Delays inside cyw43_arch_init_with_country
--    // are intended to meet the power on timing requirements, but apparently
--    // are inadequate. We'll back off this long delay based on future testing.
--    mp_hal_delay_ms(1000);
 -    // Change this as a placeholder as to how to init with country code.
 -    // Default country code is CYW43_COUNTRY_WORLDWIDE)
 -    if (cyw43_arch_init_with_country(PICO_CYW43_ARCH_DEFAULT_COUNTRY_CODE)) {

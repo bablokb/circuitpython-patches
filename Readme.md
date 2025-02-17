@@ -46,8 +46,6 @@ and on-going activities (e.g. playing music) will stop. It is the duty
 of the application code to deinit/reinit any peripherals cleanly before
 and after light-sleep.
 
-**Note**: this patch already integrates the cyw43_init_nodelay.patch.
-
 Download: [rp2xxx_low_power.patch](patches/rp2xxx_low_power.patch)
 
 
