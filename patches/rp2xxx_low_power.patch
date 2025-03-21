@@ -1,5 +1,5 @@
 diff --git a/ports/raspberrypi/Makefile b/ports/raspberrypi/Makefile
-index d1550a386e..835b3b7439 100644
+index cb58e90352..9f917f550b 100644
 --- a/ports/raspberrypi/Makefile
 +++ b/ports/raspberrypi/Makefile
 @@ -531,6 +531,7 @@ SRC_C += \

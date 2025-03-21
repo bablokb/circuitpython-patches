@@ -1,8 +1,2817 @@
+diff --git a/frozen/ili9488_waveshare35/ili9488_waveshare35.py b/frozen/ili9488_waveshare35/ili9488_waveshare35.py
+new file mode 100644
+index 0000000000..3df42b8c0f
+--- /dev/null
++++ b/frozen/ili9488_waveshare35/ili9488_waveshare35.py
+@@ -0,0 +1,79 @@
++# -------------------------------------------------------------------------
++# CircuitPython driver for Waveshare Pico ResTouch 3.5in display.
++#
++# The display uses an ILI9488-chip. Waveshare attaches SPI on one side
++# to a 16-bit parallel bus on the ILI9488 with two SIPO shift-registers
++# in between.
++#
++# This setup is incompatible with any standard software-driver. The
++# driver here only works with a special hacked CircuitPython-version.
++#
++# Although untested, the normal _INIT_SEQUENCE should work with
++# ILI9488 displays with a direct MCU-SPI 4-wire connection.
++#
++# Author: Bernhard Bablok
++# License: MIT
++#
++# Website: https://github.com/bablokb/circuitpython-examples
++#
++# -------------------------------------------------------------------------
++
++try:
++    # used for typing only
++    from typing import Any
++except ImportError:
++    pass
++
++import busdisplay
++
++# minimal init-sequence for SPI-4wire connected ILI9488
++# snatched from: https://github.com/ptb99/micropython-ili9488
++
++_INIT_SEQUENCE = (
++  b"\x01\x80\x78"                 # SWRESET + 120ms delay
++  b"\x21\x00"                     # INVON
++  b"\xc2\x01\x33"                 # PWCTRL3
++  b"\x3a\x01\x55"                 # PIXFMT
++  b"\xb6\x03\x02\x02\x3b"         # DFUNCTR
++  b"\x11\x80\x05"                 # SLPOUT + 5ms delay
++  b"\x29\x00"                     # DISPLAY_ON
++  b"\x36\x01"                     # MADCTL, must be last
++)
++
++# init-sequence (16-bit) for Waveshare Pico-ResTouch-3.5in display
++# note: this display also needs a special hacked version of CircuitPython
++
++_INIT_SEQUENCE_16 = (
++  b"\x01\x80\x78"                     # SWRESET + 120ms delay
++  b"\x21\x00"                         # INVON
++  b"\xc2\x02\x00\x33"                 # PWCTRL3
++  b"\x3a\x02\x00\x55"                 # PIXFMT
++  b"\xb6\x06\x00\x02\x00\x02\x00\x3b" # DFUNCTR
++  b"\x11\x80\x05"                     # SLPOUT + 5ms delay
++  b"\x29\x00"                         # DISPLAY_ON
++  b"\x36\x02\x00"                     # MADCTL, must be last
++)
++
++_MADCTL = {
++    0: (480,320,b"\xe8"),
++   90: (320,480,b"\x48"),
++  180: (480,320,b"\x28"),
++  270: (320,480,b"\x88")
++  }
++
++class ILI9488(busdisplay.BusDisplay):
++  """
++  ILI9488 display driver
++
++  :param displayio.FourWire bus: bus that the display is connected to
++  """
++
++  def __init__(self, bus: displayio.FourWire, rotation=0, **kwargs: Any):
++    # fix width,height and rotation
++    # instead of CP rotating the content, we delegate it to the chip
++    width,height,madctl = _MADCTL[rotation]
++    super().__init__(bus, _INIT_SEQUENCE_16+madctl,
++                     width=width,
++                     height=height,
++                     rotation=0,
++                     **kwargs)
+diff --git a/ports/espressif/boards/dfrobot_firebeetle_d/board.c b/ports/espressif/boards/dfrobot_firebeetle_d/board.c
+new file mode 100644
+index 0000000000..164430c88c
+--- /dev/null
++++ b/ports/espressif/boards/dfrobot_firebeetle_d/board.c
+@@ -0,0 +1,29 @@
++/*
++ * This file is part of the MicroPython project, http://micropython.org/
++ *
++ * The MIT License (MIT)
++ *
++ * Copyright (c) 2020 Scott Shawcroft for Adafruit Industries
++ *
++ * Permission is hereby granted, free of charge, to any person obtaining a copy
++ * of this software and associated documentation files (the "Software"), to deal
++ * in the Software without restriction, including without limitation the rights
++ * to use, copy, modify, merge, publish, distribute, sublicense, and/or sell
++ * copies of the Software, and to permit persons to whom the Software is
++ * furnished to do so, subject to the following conditions:
++ *
++ * The above copyright notice and this permission notice shall be included in
++ * all copies or substantial portions of the Software.
++ *
++ * THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND, EXPRESS OR
++ * IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF MERCHANTABILITY,
++ * FITNESS FOR A PARTICULAR PURPOSE AND NONINFRINGEMENT. IN NO EVENT SHALL THE
++ * AUTHORS OR COPYRIGHT HOLDERS BE LIABLE FOR ANY CLAIM, DAMAGES OR OTHER
++ * LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM,
++ * OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN
++ * THE SOFTWARE.
++ */
++
++#include "supervisor/board.h"
++
++// Use the MP_WEAK supervisor/shared/board.c versions of routines not defined here.
+diff --git a/ports/espressif/boards/dfrobot_firebeetle_d/mpconfigboard.h b/ports/espressif/boards/dfrobot_firebeetle_d/mpconfigboard.h
+new file mode 100644
+index 0000000000..f12d0e4abb
+--- /dev/null
++++ b/ports/espressif/boards/dfrobot_firebeetle_d/mpconfigboard.h
+@@ -0,0 +1,45 @@
++/*
++ * This file is part of the MicroPython project, http://micropython.org/
++ *
++ * The MIT License (MIT)
++ *
++ * Copyright (c) 2022 Dan Halbert for Adafruit Industries
++ *
++ * Permission is hereby granted, free of charge, to any person obtaining a copy
++ * of this software and associated documentation files (the "Software"), to deal
++ * in the Software without restriction, including without limitation the rights
++ * to use, copy, modify, merge, publish, distribute, sublicense, and/or sell
++ * copies of the Software, and to permit persons to whom the Software is
++ * furnished to do so, subject to the following conditions:
++ *
++ * The above copyright notice and this permission notice shall be included in
++ * all copies or substantial portions of the Software.
++ *
++ * THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND, EXPRESS OR
++ * IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF MERCHANTABILITY,
++ * FITNESS FOR A PARTICULAR PURPOSE AND NONINFRINGEMENT. IN NO EVENT SHALL THE
++ * AUTHORS OR COPYRIGHT HOLDERS BE LIABLE FOR ANY CLAIM, DAMAGES OR OTHER
++ * LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM,
++ * OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN
++ * THE SOFTWARE.
++ */
++
++// Micropython setup
++
++#define MICROPY_HW_BOARD_NAME       "DFRobot FireBeetle ESP32-WROOM-32D"
++#define MICROPY_HW_MCU_NAME         "ESP32"
++
++#define MICROPY_HW_LED_STATUS       (&pin_GPIO2)
++
++#define CIRCUITPY_BOARD_I2C         (1)
++#define CIRCUITPY_BOARD_I2C_PIN     {{.scl = &pin_GPIO22, .sda = &pin_GPIO21}}
++
++#define CIRCUITPY_BOARD_SPI         (1)
++#define CIRCUITPY_BOARD_SPI_PIN     {{.clock = &pin_GPIO18, .mosi = &pin_GPIO23, .miso = &pin_GPIO19}}
++
++#define CIRCUITPY_BOARD_UART        (1)
++#define CIRCUITPY_BOARD_UART_PIN    {{.tx = &pin_GPIO1, .rx = &pin_GPIO3}}
++
++// UART pins attached to the USB-serial converter chip
++#define CIRCUITPY_CONSOLE_UART_TX (&pin_GPIO1)
++#define CIRCUITPY_CONSOLE_UART_RX (&pin_GPIO3)
+diff --git a/ports/espressif/boards/dfrobot_firebeetle_d/mpconfigboard.mk b/ports/espressif/boards/dfrobot_firebeetle_d/mpconfigboard.mk
+new file mode 100644
+index 0000000000..7232a806f7
+--- /dev/null
++++ b/ports/espressif/boards/dfrobot_firebeetle_d/mpconfigboard.mk
+@@ -0,0 +1,9 @@
++CIRCUITPY_CREATOR_ID =  0x00001A86
++CIRCUITPY_CREATION_ID = 0x00007523
++
++IDF_TARGET = esp32
++
++CIRCUITPY_ESP_FLASH_MODE = dio
++CIRCUITPY_ESP_FLASH_FREQ = 40m
++CIRCUITPY_ESP_FLASH_SIZE = 4MB
++CIRCUITPY_ESPCAMERA = 0
+diff --git a/ports/espressif/boards/dfrobot_firebeetle_d/pins.c b/ports/espressif/boards/dfrobot_firebeetle_d/pins.c
+new file mode 100644
+index 0000000000..0fac49f78f
+--- /dev/null
++++ b/ports/espressif/boards/dfrobot_firebeetle_d/pins.c
+@@ -0,0 +1,68 @@
++#include "shared-bindings/board/__init__.h"
++
++STATIC const mp_rom_map_elem_t board_module_globals_table[] = {
++    CIRCUITPYTHON_BOARD_DICT_STANDARD_ITEMS
++
++    // External pins are in silkscreen order, from top to bottom, left side, then right side
++    { MP_ROM_QSTR(MP_QSTR_A0), MP_ROM_PTR(&pin_GPIO36) },
++    { MP_ROM_QSTR(MP_QSTR_GPIO36), MP_ROM_PTR(&pin_GPIO36) },
++    { MP_ROM_QSTR(MP_QSTR_A1), MP_ROM_PTR(&pin_GPIO39) },
++    { MP_ROM_QSTR(MP_QSTR_GPIO39), MP_ROM_PTR(&pin_GPIO39) },
++    { MP_ROM_QSTR(MP_QSTR_A2), MP_ROM_PTR(&pin_GPIO34) },
++    { MP_ROM_QSTR(MP_QSTR_GPIO34), MP_ROM_PTR(&pin_GPIO34) },
++    { MP_ROM_QSTR(MP_QSTR_A3), MP_ROM_PTR(&pin_GPIO35) },
++    { MP_ROM_QSTR(MP_QSTR_GPIO35), MP_ROM_PTR(&pin_GPIO35) },
++    { MP_ROM_QSTR(MP_QSTR_A4), MP_ROM_PTR(&pin_GPIO15) },
++    { MP_ROM_QSTR(MP_QSTR_GPIO15), MP_ROM_PTR(&pin_GPIO15) },
++
++    { MP_ROM_QSTR(MP_QSTR_GPIO0), MP_ROM_PTR(&pin_GPIO0) },
++
++    { MP_ROM_QSTR(MP_QSTR_SCK), MP_ROM_PTR(&pin_GPIO18) },
++    { MP_ROM_QSTR(MP_QSTR_GPIO18), MP_ROM_PTR(&pin_GPIO18) },
++    { MP_ROM_QSTR(MP_QSTR_MOSI), MP_ROM_PTR(&pin_GPIO23) },
++    { MP_ROM_QSTR(MP_QSTR_GPIO23), MP_ROM_PTR(&pin_GPIO23) },
++    { MP_ROM_QSTR(MP_QSTR_MISO), MP_ROM_PTR(&pin_GPIO19) },
++    { MP_ROM_QSTR(MP_QSTR_GPIO19), MP_ROM_PTR(&pin_GPIO19) },
++    { MP_ROM_QSTR(MP_QSTR_SDA), MP_ROM_PTR(&pin_GPIO21) },
++    { MP_ROM_QSTR(MP_QSTR_GPIO21), MP_ROM_PTR(&pin_GPIO21) },
++    { MP_ROM_QSTR(MP_QSTR_SCL), MP_ROM_PTR(&pin_GPIO22) },
++    { MP_ROM_QSTR(MP_QSTR_GPIO22), MP_ROM_PTR(&pin_GPIO22) },
++    { MP_ROM_QSTR(MP_QSTR_BCLK), MP_ROM_PTR(&pin_GPIO14) },
++    { MP_ROM_QSTR(MP_QSTR_GPIO14), MP_ROM_PTR(&pin_GPIO14) },
++    { MP_ROM_QSTR(MP_QSTR_MCLK), MP_ROM_PTR(&pin_GPIO12) },
++    { MP_ROM_QSTR(MP_QSTR_GPIO12), MP_ROM_PTR(&pin_GPIO12) },
++    { MP_ROM_QSTR(MP_QSTR_DO), MP_ROM_PTR(&pin_GPIO4) },
++    { MP_ROM_QSTR(MP_QSTR_GPIO4), MP_ROM_PTR(&pin_GPIO4) },
++    { MP_ROM_QSTR(MP_QSTR_DI), MP_ROM_PTR(&pin_GPIO16) },
++    { MP_ROM_QSTR(MP_QSTR_GPIO16), MP_ROM_PTR(&pin_GPIO16) },
++    { MP_ROM_QSTR(MP_QSTR_LRCK), MP_ROM_PTR(&pin_GPIO17) },
++    { MP_ROM_QSTR(MP_QSTR_GPIO17), MP_ROM_PTR(&pin_GPIO17) },
++
++    { MP_ROM_QSTR(MP_QSTR_D0), MP_ROM_PTR(&pin_GPIO3) },
++    { MP_ROM_QSTR(MP_QSTR_GPIO3), MP_ROM_PTR(&pin_GPIO3) },
++    { MP_ROM_QSTR(MP_QSTR_RX), MP_ROM_PTR(&pin_GPIO3) },
++
++    { MP_ROM_QSTR(MP_QSTR_D1), MP_ROM_PTR(&pin_GPIO1) },
++    { MP_ROM_QSTR(MP_QSTR_GPIO1), MP_ROM_PTR(&pin_GPIO1) },
++    { MP_ROM_QSTR(MP_QSTR_TX), MP_ROM_PTR(&pin_GPIO1) },
++
++    { MP_ROM_QSTR(MP_QSTR_D2), MP_ROM_PTR(&pin_GPIO25) },
++    { MP_ROM_QSTR(MP_QSTR_GPIO25), MP_ROM_PTR(&pin_GPIO25) },
++    { MP_ROM_QSTR(MP_QSTR_D3), MP_ROM_PTR(&pin_GPIO26) },
++    { MP_ROM_QSTR(MP_QSTR_GPIO26), MP_ROM_PTR(&pin_GPIO26) },
++    { MP_ROM_QSTR(MP_QSTR_D4), MP_ROM_PTR(&pin_GPIO27) },
++    { MP_ROM_QSTR(MP_QSTR_GPIO27), MP_ROM_PTR(&pin_GPIO27) },
++    { MP_ROM_QSTR(MP_QSTR_D7), MP_ROM_PTR(&pin_GPIO13) },
++    { MP_ROM_QSTR(MP_QSTR_GPIO13), MP_ROM_PTR(&pin_GPIO13) },
++    { MP_ROM_QSTR(MP_QSTR_D8), MP_ROM_PTR(&pin_GPIO5) },
++    { MP_ROM_QSTR(MP_QSTR_GPIO5), MP_ROM_PTR(&pin_GPIO5) },
++
++    { MP_ROM_QSTR(MP_QSTR_D9), MP_ROM_PTR(&pin_GPIO2) },
++    { MP_ROM_QSTR(MP_QSTR_GPIO2), MP_ROM_PTR(&pin_GPIO2) },
++    { MP_ROM_QSTR(MP_QSTR_LED), MP_ROM_PTR(&pin_GPIO2) },
++
++    { MP_ROM_QSTR(MP_QSTR_I2C), MP_ROM_PTR(&board_i2c_obj) },
++    { MP_ROM_QSTR(MP_QSTR_SPI), MP_ROM_PTR(&board_spi_obj) },
++    { MP_ROM_QSTR(MP_QSTR_UART), MP_ROM_PTR(&board_uart_obj) }
++};
++MP_DEFINE_CONST_DICT(board_module_globals, board_module_globals_table);
+diff --git a/ports/espressif/boards/dfrobot_firebeetle_d/sdkconfig b/ports/espressif/boards/dfrobot_firebeetle_d/sdkconfig
+new file mode 100644
+index 0000000000..cc10aeaa08
+--- /dev/null
++++ b/ports/espressif/boards/dfrobot_firebeetle_d/sdkconfig
+@@ -0,0 +1,20 @@
++CONFIG_ESP32_ECO3_CACHE_LOCK_FIX=y
++CONFIG_ESP32_SPIRAM_SUPPORT=n
++
++# Uncomment (remove ###) to send ESP_LOG  output to TX/RX pins
++### #
++### # ESP System Settings
++### #
++### CONFIG_ESP_SYSTEM_PANIC_PRINT_HALT=y
++### # CONFIG_ESP_SYSTEM_PANIC_SILENT_REBOOT is not set
++### CONFIG_ESP_CONSOLE_UART_CUSTOM=y
++### CONFIG_ESP_CONSOLE_NONE is not set
++### CONFIG_ESP_CONSOLE_UART=y
++### CONFIG_ESP_CONSOLE_UART_CUSTOM_NUM_0=y
++### # CONFIG_ESP_CONSOLE_UART_CUSTOM_NUM_1 is not set
++### CONFIG_ESP_CONSOLE_UART_NUM=0
++### CONFIG_ESP_CONSOLE_UART_TX_GPIO=1
++### CONFIG_ESP_CONSOLE_UART_RX_GPIO=3
++### CONFIG_ESP_CONSOLE_UART_BAUDRATE=115200
++### # CONFIG_ESP_SYSTEM_CHECK_INT_LEVEL_5 is not set
++### # end of ESP System Settings
+diff --git a/ports/espressif/boards/esp32s3_pi_base_rev2/board.c b/ports/espressif/boards/esp32s3_pi_base_rev2/board.c
+new file mode 100644
+index 0000000000..331653173e
+--- /dev/null
++++ b/ports/espressif/boards/esp32s3_pi_base_rev2/board.c
+@@ -0,0 +1,29 @@
++/*
++ * This file is part of the MicroPython project, http://micropython.org/
++ *
++ * The MIT License (MIT)
++ *
++ * Copyright (c) 2021 Scott Shawcroft for Adafruit Industries
++ *
++ * Permission is hereby granted, free of charge, to any person obtaining a copy
++ * of this software and associated documentation files (the "Software"), to deal
++ * in the Software without restriction, including without limitation the rights
++ * to use, copy, modify, merge, publish, distribute, sublicense, and/or sell
++ * copies of the Software, and to permit persons to whom the Software is
++ * furnished to do so, subject to the following conditions:
++ *
++ * The above copyright notice and this permission notice shall be included in
++ * all copies or substantial portions of the Software.
++ *
++ * THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND, EXPRESS OR
++ * IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF MERCHANTABILITY,
++ * FITNESS FOR A PARTICULAR PURPOSE AND NONINFRINGEMENT. IN NO EVENT SHALL THE
++ * AUTHORS OR COPYRIGHT HOLDERS BE LIABLE FOR ANY CLAIM, DAMAGES OR OTHER
++ * LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM,
++ * OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN
++ * THE SOFTWARE.
++ */
++
++#include "supervisor/board.h"
++
++// Use the MP_WEAK supervisor/shared/board.c versions of routines not defined here.
+diff --git a/ports/espressif/boards/esp32s3_pi_base_rev2/mpconfigboard.h b/ports/espressif/boards/esp32s3_pi_base_rev2/mpconfigboard.h
+new file mode 100644
+index 0000000000..2ad507f934
+--- /dev/null
++++ b/ports/espressif/boards/esp32s3_pi_base_rev2/mpconfigboard.h
+@@ -0,0 +1,14 @@
++#define MICROPY_HW_BOARD_NAME "ESP32S3 Pi Base Rev2"
++#define MICROPY_HW_MCU_NAME         "ESP32S3"
++
++#define MICROPY_HW_NEOPIXEL         (&pin_GPIO21)
++
++#define CIRCUITPY_BOARD_I2C         (1)
++#define CIRCUITPY_BOARD_I2C_PIN     {{.scl = &pin_GPIO14, .sda = &pin_GPIO13}}
++
++#define DEFAULT_SPI_BUS_SCK         (&pin_GPIO1)
++#define DEFAULT_SPI_BUS_MISO        (&pin_GPIO42)
++#define DEFAULT_SPI_BUS_MOSI        (&pin_GPIO2)
++
++#define CIRCUITPY_BOARD_UART        (1)
++#define CIRCUITPY_BOARD_UART_PIN    {{.tx = &pin_GPIO15, .rx = &pin_GPIO16}}
+diff --git a/ports/espressif/boards/esp32s3_pi_base_rev2/mpconfigboard.mk b/ports/espressif/boards/esp32s3_pi_base_rev2/mpconfigboard.mk
+new file mode 100644
+index 0000000000..2c45949a8d
+--- /dev/null
++++ b/ports/espressif/boards/esp32s3_pi_base_rev2/mpconfigboard.mk
+@@ -0,0 +1,16 @@
++USB_VID = 0x303a
++USB_PID = 0x81A3
++USB_PRODUCT = "ESP32-S3-Pico"
++USB_MANUFACTURER = "Waveshare Electronics"
++
++IDF_TARGET = esp32s3
++
++CIRCUITPY_ESP_FLASH_MODE = qio
++CIRCUITPY_ESP_FLASH_FREQ = 80m
++CIRCUITPY_ESP_FLASH_SIZE = 16MB
++
++CIRCUITPY_ESP_PSRAM_SIZE = 2MB
++CIRCUITPY_ESP_PSRAM_MODE = qio
++CIRCUITPY_ESP_PSRAM_FREQ = 80m
++
++FROZEN_MPY_DIRS += $(TOP)/frozen/Adafruit_CircuitPython_NeoPixel
+diff --git a/ports/espressif/boards/esp32s3_pi_base_rev2/pins.c b/ports/espressif/boards/esp32s3_pi_base_rev2/pins.c
+new file mode 100644
+index 0000000000..6e13f20ab2
+--- /dev/null
++++ b/ports/espressif/boards/esp32s3_pi_base_rev2/pins.c
+@@ -0,0 +1,109 @@
++#include "shared-bindings/board/__init__.h"
++
++STATIC const mp_rom_map_elem_t board_module_globals_table[] = {
++    CIRCUITPYTHON_BOARD_DICT_STANDARD_ITEMS
++
++    { MP_ROM_QSTR(MP_QSTR_GP0), MP_ROM_PTR(&pin_GPIO11) },
++    { MP_ROM_QSTR(MP_QSTR_GP1), MP_ROM_PTR(&pin_GPIO12) },
++    { MP_ROM_QSTR(MP_QSTR_GP2), MP_ROM_PTR(&pin_GPIO13) },
++    { MP_ROM_QSTR(MP_QSTR_GP3), MP_ROM_PTR(&pin_GPIO14) },
++    { MP_ROM_QSTR(MP_QSTR_GP4), MP_ROM_PTR(&pin_GPIO15) },
++    { MP_ROM_QSTR(MP_QSTR_GP5), MP_ROM_PTR(&pin_GPIO16) },
++    { MP_ROM_QSTR(MP_QSTR_GP6), MP_ROM_PTR(&pin_GPIO17) },
++    { MP_ROM_QSTR(MP_QSTR_GP7), MP_ROM_PTR(&pin_GPIO18) },
++    { MP_ROM_QSTR(MP_QSTR_GP8), MP_ROM_PTR(&pin_GPIO33) },
++    { MP_ROM_QSTR(MP_QSTR_GP9), MP_ROM_PTR(&pin_GPIO34) },
++    { MP_ROM_QSTR(MP_QSTR_GP10), MP_ROM_PTR(&pin_GPIO35) },
++    { MP_ROM_QSTR(MP_QSTR_GP11), MP_ROM_PTR(&pin_GPIO36) },
++    { MP_ROM_QSTR(MP_QSTR_GP12), MP_ROM_PTR(&pin_GPIO37) },
++    { MP_ROM_QSTR(MP_QSTR_GP13), MP_ROM_PTR(&pin_GPIO38) },
++    { MP_ROM_QSTR(MP_QSTR_GP14), MP_ROM_PTR(&pin_GPIO39) },
++    { MP_ROM_QSTR(MP_QSTR_GP15), MP_ROM_PTR(&pin_GPIO40) },
++    { MP_ROM_QSTR(MP_QSTR_GP16), MP_ROM_PTR(&pin_GPIO42) },
++    { MP_ROM_QSTR(MP_QSTR_GP17), MP_ROM_PTR(&pin_GPIO41) },
++    { MP_ROM_QSTR(MP_QSTR_GP18), MP_ROM_PTR(&pin_GPIO1) },
++    { MP_ROM_QSTR(MP_QSTR_GP19), MP_ROM_PTR(&pin_GPIO2) },
++    { MP_ROM_QSTR(MP_QSTR_GP20), MP_ROM_PTR(&pin_GPIO4) },
++    { MP_ROM_QSTR(MP_QSTR_GP21), MP_ROM_PTR(&pin_GPIO5) },
++    { MP_ROM_QSTR(MP_QSTR_GP22), MP_ROM_PTR(&pin_GPIO6) },
++    { MP_ROM_QSTR(MP_QSTR_GP26), MP_ROM_PTR(&pin_GPIO7) },
++    { MP_ROM_QSTR(MP_QSTR_GP27), MP_ROM_PTR(&pin_GPIO8) },
++    { MP_ROM_QSTR(MP_QSTR_GP28), MP_ROM_PTR(&pin_GPIO9) },
++
++    { MP_ROM_QSTR(MP_QSTR_GPIO5), MP_ROM_PTR(&pin_GPIO11) },
++    { MP_ROM_QSTR(MP_QSTR_GPIO6), MP_ROM_PTR(&pin_GPIO12) },
++
++    { MP_ROM_QSTR(MP_QSTR_GPIO2), MP_ROM_PTR(&pin_GPIO13) },
++    { MP_ROM_QSTR(MP_QSTR_SDA),   MP_ROM_PTR(&pin_GPIO13) },
++
++    { MP_ROM_QSTR(MP_QSTR_GPIO3), MP_ROM_PTR(&pin_GPIO14) },
++    { MP_ROM_QSTR(MP_QSTR_SCL),   MP_ROM_PTR(&pin_GPIO14) },
++
++    { MP_ROM_QSTR(MP_QSTR_GPIO14), MP_ROM_PTR(&pin_GPIO15) },
++    { MP_ROM_QSTR(MP_QSTR_TX),    MP_ROM_PTR(&pin_GPIO15) },
++
++    { MP_ROM_QSTR(MP_QSTR_GPIO15), MP_ROM_PTR(&pin_GPIO16) },
++    { MP_ROM_QSTR(MP_QSTR_RX),     MP_ROM_PTR(&pin_GPIO16) },
++
++    { MP_ROM_QSTR(MP_QSTR_GPIO23), MP_ROM_PTR(&pin_GPIO17) },
++
++    { MP_ROM_QSTR(MP_QSTR_GPIO18), MP_ROM_PTR(&pin_GPIO18) },
++
++    { MP_ROM_QSTR(MP_QSTR_GPIO19), MP_ROM_PTR(&pin_GPIO33) },
++    { MP_ROM_QSTR(MP_QSTR_MISO1),  MP_ROM_PTR(&pin_GPIO33) },
++
++    { MP_ROM_QSTR(MP_QSTR_GPIO25), MP_ROM_PTR(&pin_GPIO34) },
++
++    { MP_ROM_QSTR(MP_QSTR_GPIO7), MP_ROM_PTR(&pin_GPIO35) },
++    { MP_ROM_QSTR(MP_QSTR_CE1),   MP_ROM_PTR(&pin_GPIO35) },
++
++    { MP_ROM_QSTR(MP_QSTR_GPIO24), MP_ROM_PTR(&pin_GPIO36) },
++
++    { MP_ROM_QSTR(MP_QSTR_GPIO12), MP_ROM_PTR(&pin_GPIO37) },
++
++    { MP_ROM_QSTR(MP_QSTR_GPIO16), MP_ROM_PTR(&pin_GPIO38) },
++
++    { MP_ROM_QSTR(MP_QSTR_GPIO21), MP_ROM_PTR(&pin_GPIO39) },
++    { MP_ROM_QSTR(MP_QSTR_SCLK1),  MP_ROM_PTR(&pin_GPIO39) },
++
++    { MP_ROM_QSTR(MP_QSTR_GPIO20), MP_ROM_PTR(&pin_GPIO40) },
++    { MP_ROM_QSTR(MP_QSTR_MOSI1),  MP_ROM_PTR(&pin_GPIO40) },
++
++    { MP_ROM_QSTR(MP_QSTR_GPIO9), MP_ROM_PTR(&pin_GPIO42) },
++    { MP_ROM_QSTR(MP_QSTR_MISO),  MP_ROM_PTR(&pin_GPIO42) },
++
++    { MP_ROM_QSTR(MP_QSTR_GPIO8),  MP_ROM_PTR(&pin_GPIO41) },
++    { MP_ROM_QSTR(MP_QSTR_CE0),    MP_ROM_PTR(&pin_GPIO41) },
++
++    { MP_ROM_QSTR(MP_QSTR_GPIO11), MP_ROM_PTR(&pin_GPIO1) },
++    { MP_ROM_QSTR(MP_QSTR_SCLK),   MP_ROM_PTR(&pin_GPIO1) },
++
++    { MP_ROM_QSTR(MP_QSTR_GPIO10), MP_ROM_PTR(&pin_GPIO2) },
++    { MP_ROM_QSTR(MP_QSTR_MOSI),   MP_ROM_PTR(&pin_GPIO2) },
++
++    { MP_ROM_QSTR(MP_QSTR_GPIO22), MP_ROM_PTR(&pin_GPIO4) },
++
++    { MP_ROM_QSTR(MP_QSTR_GPIO27), MP_ROM_PTR(&pin_GPIO5) },
++
++    { MP_ROM_QSTR(MP_QSTR_GPIO17), MP_ROM_PTR(&pin_GPIO6) },
++
++    { MP_ROM_QSTR(MP_QSTR_GPIO26), MP_ROM_PTR(&pin_GPIO7) },
++    { MP_ROM_QSTR(MP_QSTR_SD_CS),  MP_ROM_PTR(&pin_GPIO7) },
++
++    { MP_ROM_QSTR(MP_QSTR_GPIO13), MP_ROM_PTR(&pin_GPIO8) },
++
++    { MP_ROM_QSTR(MP_QSTR_GPIO4), MP_ROM_PTR(&pin_GPIO9) },
++
++    { MP_ROM_QSTR(MP_QSTR_NEOPIXEL), MP_ROM_PTR(&pin_GPIO21) },
++    { MP_ROM_QSTR(MP_QSTR_VBUS_SENSE), MP_ROM_PTR(&pin_GPIO3) },
++
++    // connected to pin 35, which is ADC_VREF on the Pico
++    // this pin is not mapped to the 2x20 Pi-connector
++    { MP_ROM_QSTR(MP_QSTR_VOLTAGE_MONITOR), MP_ROM_PTR(&pin_GPIO10) },
++    { MP_ROM_QSTR(MP_QSTR_A3), MP_ROM_PTR(&pin_GPIO10) },
++
++    { MP_ROM_QSTR(MP_QSTR_I2C), MP_ROM_PTR(&board_i2c_obj) },
++    { MP_ROM_QSTR(MP_QSTR_UART), MP_ROM_PTR(&board_uart_obj) },
++
++};
++MP_DEFINE_CONST_DICT(board_module_globals, board_module_globals_table);
+diff --git a/ports/espressif/boards/esp32s3_pi_base_rev2/sdkconfig b/ports/espressif/boards/esp32s3_pi_base_rev2/sdkconfig
+new file mode 100644
+index 0000000000..f5ef797681
+--- /dev/null
++++ b/ports/espressif/boards/esp32s3_pi_base_rev2/sdkconfig
+@@ -0,0 +1,15 @@
++#
++# Espressif IoT Development Framework Configuration
++#
++#
++# Component config
++#
++#
++# LWIP
++#
++CONFIG_LWIP_LOCAL_HOSTNAME="espressif-esp32s3"
++# end of LWIP
++
++# end of Component config
++
++# end of Espressif IoT Development Framework Configuration
+diff --git a/ports/espressif/boards/esp32s3_zero_base_rev1/board.c b/ports/espressif/boards/esp32s3_zero_base_rev1/board.c
+new file mode 100644
+index 0000000000..331653173e
+--- /dev/null
++++ b/ports/espressif/boards/esp32s3_zero_base_rev1/board.c
+@@ -0,0 +1,29 @@
++/*
++ * This file is part of the MicroPython project, http://micropython.org/
++ *
++ * The MIT License (MIT)
++ *
++ * Copyright (c) 2021 Scott Shawcroft for Adafruit Industries
++ *
++ * Permission is hereby granted, free of charge, to any person obtaining a copy
++ * of this software and associated documentation files (the "Software"), to deal
++ * in the Software without restriction, including without limitation the rights
++ * to use, copy, modify, merge, publish, distribute, sublicense, and/or sell
++ * copies of the Software, and to permit persons to whom the Software is
++ * furnished to do so, subject to the following conditions:
++ *
++ * The above copyright notice and this permission notice shall be included in
++ * all copies or substantial portions of the Software.
++ *
++ * THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND, EXPRESS OR
++ * IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF MERCHANTABILITY,
++ * FITNESS FOR A PARTICULAR PURPOSE AND NONINFRINGEMENT. IN NO EVENT SHALL THE
++ * AUTHORS OR COPYRIGHT HOLDERS BE LIABLE FOR ANY CLAIM, DAMAGES OR OTHER
++ * LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM,
++ * OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN
++ * THE SOFTWARE.
++ */
++
++#include "supervisor/board.h"
++
++// Use the MP_WEAK supervisor/shared/board.c versions of routines not defined here.
+diff --git a/ports/espressif/boards/esp32s3_zero_base_rev1/mpconfigboard.h b/ports/espressif/boards/esp32s3_zero_base_rev1/mpconfigboard.h
+new file mode 100644
+index 0000000000..1320ca596e
+--- /dev/null
++++ b/ports/espressif/boards/esp32s3_zero_base_rev1/mpconfigboard.h
+@@ -0,0 +1,14 @@
++#define MICROPY_HW_BOARD_NAME "ESP32S3 Zero Base Rev1"
++#define MICROPY_HW_MCU_NAME         "ESP32S3"
++
++#define MICROPY_HW_NEOPIXEL         (&pin_GPIO21)
++
++#define CIRCUITPY_BOARD_I2C         (1)
++#define CIRCUITPY_BOARD_I2C_PIN     {{.scl = &pin_GPIO14, .sda = &pin_GPIO13}}
++
++#define DEFAULT_SPI_BUS_SCK         (&pin_GPIO35)
++#define DEFAULT_SPI_BUS_MISO        (&pin_GPIO37)
++#define DEFAULT_SPI_BUS_MOSI        (&pin_GPIO36)
++
++#define CIRCUITPY_BOARD_UART        (1)
++#define CIRCUITPY_BOARD_UART_PIN    {{.tx = &pin_GPIO11, .rx = &pin_GPIO12}}
+diff --git a/ports/espressif/boards/esp32s3_zero_base_rev1/mpconfigboard.mk b/ports/espressif/boards/esp32s3_zero_base_rev1/mpconfigboard.mk
+new file mode 100644
+index 0000000000..2c45949a8d
+--- /dev/null
++++ b/ports/espressif/boards/esp32s3_zero_base_rev1/mpconfigboard.mk
+@@ -0,0 +1,16 @@
++USB_VID = 0x303a
++USB_PID = 0x81A3
++USB_PRODUCT = "ESP32-S3-Pico"
++USB_MANUFACTURER = "Waveshare Electronics"
++
++IDF_TARGET = esp32s3
++
++CIRCUITPY_ESP_FLASH_MODE = qio
++CIRCUITPY_ESP_FLASH_FREQ = 80m
++CIRCUITPY_ESP_FLASH_SIZE = 16MB
++
++CIRCUITPY_ESP_PSRAM_SIZE = 2MB
++CIRCUITPY_ESP_PSRAM_MODE = qio
++CIRCUITPY_ESP_PSRAM_FREQ = 80m
++
++FROZEN_MPY_DIRS += $(TOP)/frozen/Adafruit_CircuitPython_NeoPixel
+diff --git a/ports/espressif/boards/esp32s3_zero_base_rev1/pins.c b/ports/espressif/boards/esp32s3_zero_base_rev1/pins.c
+new file mode 100644
+index 0000000000..3782acccd2
+--- /dev/null
++++ b/ports/espressif/boards/esp32s3_zero_base_rev1/pins.c
+@@ -0,0 +1,100 @@
++#include "shared-bindings/board/__init__.h"
++
++STATIC const mp_rom_map_elem_t board_module_globals_table[] = {
++    CIRCUITPYTHON_BOARD_DICT_STANDARD_ITEMS
++
++    { MP_ROM_QSTR(MP_QSTR_GP0), MP_ROM_PTR(&pin_GPIO11) },
++    { MP_ROM_QSTR(MP_QSTR_GP1), MP_ROM_PTR(&pin_GPIO12) },
++    { MP_ROM_QSTR(MP_QSTR_GP2), MP_ROM_PTR(&pin_GPIO13) },
++    { MP_ROM_QSTR(MP_QSTR_GP3), MP_ROM_PTR(&pin_GPIO14) },
++    { MP_ROM_QSTR(MP_QSTR_GP4), MP_ROM_PTR(&pin_GPIO15) },
++    { MP_ROM_QSTR(MP_QSTR_GP5), MP_ROM_PTR(&pin_GPIO16) },
++    { MP_ROM_QSTR(MP_QSTR_GP6), MP_ROM_PTR(&pin_GPIO17) },
++    { MP_ROM_QSTR(MP_QSTR_GP7), MP_ROM_PTR(&pin_GPIO18) },
++    { MP_ROM_QSTR(MP_QSTR_GP8), MP_ROM_PTR(&pin_GPIO33) },
++    { MP_ROM_QSTR(MP_QSTR_GP9), MP_ROM_PTR(&pin_GPIO34) },
++    { MP_ROM_QSTR(MP_QSTR_GP10), MP_ROM_PTR(&pin_GPIO35) },
++    { MP_ROM_QSTR(MP_QSTR_GP11), MP_ROM_PTR(&pin_GPIO36) },
++    { MP_ROM_QSTR(MP_QSTR_GP12), MP_ROM_PTR(&pin_GPIO37) },
++    { MP_ROM_QSTR(MP_QSTR_GP13), MP_ROM_PTR(&pin_GPIO38) },
++    { MP_ROM_QSTR(MP_QSTR_GP14), MP_ROM_PTR(&pin_GPIO39) },
++    { MP_ROM_QSTR(MP_QSTR_GP15), MP_ROM_PTR(&pin_GPIO40) },
++    { MP_ROM_QSTR(MP_QSTR_GP16), MP_ROM_PTR(&pin_GPIO42) },
++    { MP_ROM_QSTR(MP_QSTR_GP17), MP_ROM_PTR(&pin_GPIO41) },
++    { MP_ROM_QSTR(MP_QSTR_GP18), MP_ROM_PTR(&pin_GPIO1) },
++    { MP_ROM_QSTR(MP_QSTR_GP19), MP_ROM_PTR(&pin_GPIO2) },
++    { MP_ROM_QSTR(MP_QSTR_GP20), MP_ROM_PTR(&pin_GPIO4) },
++    { MP_ROM_QSTR(MP_QSTR_GP21), MP_ROM_PTR(&pin_GPIO5) },
++    { MP_ROM_QSTR(MP_QSTR_GP22), MP_ROM_PTR(&pin_GPIO6) },
++    { MP_ROM_QSTR(MP_QSTR_GP26), MP_ROM_PTR(&pin_GPIO7) },
++    { MP_ROM_QSTR(MP_QSTR_GP27), MP_ROM_PTR(&pin_GPIO8) },
++    { MP_ROM_QSTR(MP_QSTR_GP28), MP_ROM_PTR(&pin_GPIO9) },
++
++    { MP_ROM_QSTR(MP_QSTR_GPIO2), MP_ROM_PTR(&pin_GPIO13) },
++    { MP_ROM_QSTR(MP_QSTR_SDA),   MP_ROM_PTR(&pin_GPIO13) },
++
++    { MP_ROM_QSTR(MP_QSTR_GPIO3), MP_ROM_PTR(&pin_GPIO14) },
++    { MP_ROM_QSTR(MP_QSTR_SCL),   MP_ROM_PTR(&pin_GPIO14) },
++
++    { MP_ROM_QSTR(MP_QSTR_GPIO4), MP_ROM_PTR(&pin_GPIO15) },
++    { MP_ROM_QSTR(MP_QSTR_GPIO5), MP_ROM_PTR(&pin_GPIO5) },
++    { MP_ROM_QSTR(MP_QSTR_GPIO6), MP_ROM_PTR(&pin_GPIO38) },
++
++    { MP_ROM_QSTR(MP_QSTR_GPIO7), MP_ROM_PTR(&pin_GPIO6) },
++    { MP_ROM_QSTR(MP_QSTR_CE1),   MP_ROM_PTR(&pin_GPIO6) },
++
++    { MP_ROM_QSTR(MP_QSTR_GPIO8),  MP_ROM_PTR(&pin_GPIO34) },
++    { MP_ROM_QSTR(MP_QSTR_CE0),    MP_ROM_PTR(&pin_GPIO34) },
++
++    { MP_ROM_QSTR(MP_QSTR_GPIO9), MP_ROM_PTR(&pin_GPIO37) },
++    { MP_ROM_QSTR(MP_QSTR_MISO),  MP_ROM_PTR(&pin_GPIO37) },
++
++    { MP_ROM_QSTR(MP_QSTR_GPIO10), MP_ROM_PTR(&pin_GPIO36) },
++    { MP_ROM_QSTR(MP_QSTR_MOSI),   MP_ROM_PTR(&pin_GPIO36) },
++
++    { MP_ROM_QSTR(MP_QSTR_GPIO11), MP_ROM_PTR(&pin_GPIO35) },
++    { MP_ROM_QSTR(MP_QSTR_SCLK),   MP_ROM_PTR(&pin_GPIO35) },
++
++    { MP_ROM_QSTR(MP_QSTR_GPIO12), MP_ROM_PTR(&pin_GPIO4) },
++    { MP_ROM_QSTR(MP_QSTR_GPIO13), MP_ROM_PTR(&pin_GPIO39) },
++
++    { MP_ROM_QSTR(MP_QSTR_GPIO14), MP_ROM_PTR(&pin_GPIO11) },
++    { MP_ROM_QSTR(MP_QSTR_TX),    MP_ROM_PTR(&pin_GPIO11) },
++
++    { MP_ROM_QSTR(MP_QSTR_GPIO15), MP_ROM_PTR(&pin_GPIO12) },
++    { MP_ROM_QSTR(MP_QSTR_RX),     MP_ROM_PTR(&pin_GPIO12) },
++
++    { MP_ROM_QSTR(MP_QSTR_GPIO23), MP_ROM_PTR(&pin_GPIO33) },
++
++    { MP_ROM_QSTR(MP_QSTR_GPIO16), MP_ROM_PTR(&pin_GPIO41) },
++    { MP_ROM_QSTR(MP_QSTR_GPIO17), MP_ROM_PTR(&pin_GPIO16) },
++    { MP_ROM_QSTR(MP_QSTR_GPIO18), MP_ROM_PTR(&pin_GPIO9) },
++
++    { MP_ROM_QSTR(MP_QSTR_GPIO19), MP_ROM_PTR(&pin_GPIO42) },
++    { MP_ROM_QSTR(MP_QSTR_MISO1),  MP_ROM_PTR(&pin_GPIO42) },
++
++    { MP_ROM_QSTR(MP_QSTR_GPIO20), MP_ROM_PTR(&pin_GPIO2) },
++    { MP_ROM_QSTR(MP_QSTR_MOSI1),  MP_ROM_PTR(&pin_GPIO2) },
++
++    { MP_ROM_QSTR(MP_QSTR_GPIO21), MP_ROM_PTR(&pin_GPIO1) },
++    { MP_ROM_QSTR(MP_QSTR_SCLK1),  MP_ROM_PTR(&pin_GPIO1) },
++
++    { MP_ROM_QSTR(MP_QSTR_GPIO22), MP_ROM_PTR(&pin_GPIO18) },
++    { MP_ROM_QSTR(MP_QSTR_GPIO24), MP_ROM_PTR(&pin_GPIO8) },
++    { MP_ROM_QSTR(MP_QSTR_GPIO25), MP_ROM_PTR(&pin_GPIO7) },
++    { MP_ROM_QSTR(MP_QSTR_GPIO26), MP_ROM_PTR(&pin_GPIO40) },
++    { MP_ROM_QSTR(MP_QSTR_GPIO27), MP_ROM_PTR(&pin_GPIO17) },
++
++    { MP_ROM_QSTR(MP_QSTR_NEOPIXEL), MP_ROM_PTR(&pin_GPIO21) },
++    { MP_ROM_QSTR(MP_QSTR_VBUS_SENSE), MP_ROM_PTR(&pin_GPIO3) },
++
++    // connected to pin 35, which is ADC_VREF on the Pico
++    // this pin is not mapped to the 2x20 Pi-connector
++    { MP_ROM_QSTR(MP_QSTR_VOLTAGE_MONITOR), MP_ROM_PTR(&pin_GPIO10) },
++    { MP_ROM_QSTR(MP_QSTR_A3), MP_ROM_PTR(&pin_GPIO10) },
++
++    { MP_ROM_QSTR(MP_QSTR_I2C), MP_ROM_PTR(&board_i2c_obj) },
++    { MP_ROM_QSTR(MP_QSTR_UART), MP_ROM_PTR(&board_uart_obj) },
++
++};
++MP_DEFINE_CONST_DICT(board_module_globals, board_module_globals_table);
+diff --git a/ports/espressif/boards/esp32s3_zero_base_rev1/sdkconfig b/ports/espressif/boards/esp32s3_zero_base_rev1/sdkconfig
+new file mode 100644
+index 0000000000..f5ef797681
+--- /dev/null
++++ b/ports/espressif/boards/esp32s3_zero_base_rev1/sdkconfig
+@@ -0,0 +1,15 @@
++#
++# Espressif IoT Development Framework Configuration
++#
++#
++# Component config
++#
++#
++# LWIP
++#
++CONFIG_LWIP_LOCAL_HOSTNAME="espressif-esp32s3"
++# end of LWIP
++
++# end of Component config
++
++# end of Espressif IoT Development Framework Configuration
+diff --git a/ports/espressif/boards/waveshare_esp32_s3_pico_c/board.c b/ports/espressif/boards/waveshare_esp32_s3_pico_c/board.c
+new file mode 100644
+index 0000000000..164430c88c
+--- /dev/null
++++ b/ports/espressif/boards/waveshare_esp32_s3_pico_c/board.c
+@@ -0,0 +1,29 @@
++/*
++ * This file is part of the MicroPython project, http://micropython.org/
++ *
++ * The MIT License (MIT)
++ *
++ * Copyright (c) 2020 Scott Shawcroft for Adafruit Industries
++ *
++ * Permission is hereby granted, free of charge, to any person obtaining a copy
++ * of this software and associated documentation files (the "Software"), to deal
++ * in the Software without restriction, including without limitation the rights
++ * to use, copy, modify, merge, publish, distribute, sublicense, and/or sell
++ * copies of the Software, and to permit persons to whom the Software is
++ * furnished to do so, subject to the following conditions:
++ *
++ * The above copyright notice and this permission notice shall be included in
++ * all copies or substantial portions of the Software.
++ *
++ * THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND, EXPRESS OR
++ * IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF MERCHANTABILITY,
++ * FITNESS FOR A PARTICULAR PURPOSE AND NONINFRINGEMENT. IN NO EVENT SHALL THE
++ * AUTHORS OR COPYRIGHT HOLDERS BE LIABLE FOR ANY CLAIM, DAMAGES OR OTHER
++ * LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM,
++ * OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN
++ * THE SOFTWARE.
++ */
++
++#include "supervisor/board.h"
++
++// Use the MP_WEAK supervisor/shared/board.c versions of routines not defined here.
+diff --git a/ports/espressif/boards/waveshare_esp32_s3_pico_c/mpconfigboard.h b/ports/espressif/boards/waveshare_esp32_s3_pico_c/mpconfigboard.h
+new file mode 100644
+index 0000000000..7f7d1f0d7b
+--- /dev/null
++++ b/ports/espressif/boards/waveshare_esp32_s3_pico_c/mpconfigboard.h
+@@ -0,0 +1,35 @@
++/*
++ * This file is part of the MicroPython project, http://micropython.org/
++ *
++ * The MIT License (MIT)
++ *
++ * Copyright (c) 2019 Scott Shawcroft for Adafruit Industries
++ *
++ * Permission is hereby granted, free of charge, to any person obtaining a copy
++ * of this software and associated documentation files (the "Software"), to deal
++ * in the Software without restriction, including without limitation the rights
++ * to use, copy, modify, merge, publish, distribute, sublicense, and/or sell
++ * copies of the Software, and to permit persons to whom the Software is
++ * furnished to do so, subject to the following conditions:
++ *
++ * The above copyright notice and this permission notice shall be included in
++ * all copies or substantial portions of the Software.
++ *
++ * THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND, EXPRESS OR
++ * IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF MERCHANTABILITY,
++ * FITNESS FOR A PARTICULAR PURPOSE AND NONINFRINGEMENT. IN NO EVENT SHALL THE
++ * AUTHORS OR COPYRIGHT HOLDERS BE LIABLE FOR ANY CLAIM, DAMAGES OR OTHER
++ * LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM,
++ * OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN
++ * THE SOFTWARE.
++ */
++
++// Micropython setup
++
++#define MICROPY_HW_BOARD_NAME       "Waveshare ESP32-S3-Pico Compat"
++#define MICROPY_HW_MCU_NAME         "ESP32S3"
++
++#define MICROPY_HW_NEOPIXEL         (&pin_GPIO21)
++
++#define CIRCUITPY_BOARD_I2C         (1)
++#define CIRCUITPY_BOARD_I2C_PIN     {{.scl = &pin_GPIO16, .sda = &pin_GPIO15}}
+diff --git a/ports/espressif/boards/waveshare_esp32_s3_pico_c/mpconfigboard.mk b/ports/espressif/boards/waveshare_esp32_s3_pico_c/mpconfigboard.mk
+new file mode 100644
+index 0000000000..2c45949a8d
+--- /dev/null
++++ b/ports/espressif/boards/waveshare_esp32_s3_pico_c/mpconfigboard.mk
+@@ -0,0 +1,16 @@
++USB_VID = 0x303a
++USB_PID = 0x81A3
++USB_PRODUCT = "ESP32-S3-Pico"
++USB_MANUFACTURER = "Waveshare Electronics"
++
++IDF_TARGET = esp32s3
++
++CIRCUITPY_ESP_FLASH_MODE = qio
++CIRCUITPY_ESP_FLASH_FREQ = 80m
++CIRCUITPY_ESP_FLASH_SIZE = 16MB
++
++CIRCUITPY_ESP_PSRAM_SIZE = 2MB
++CIRCUITPY_ESP_PSRAM_MODE = qio
++CIRCUITPY_ESP_PSRAM_FREQ = 80m
++
++FROZEN_MPY_DIRS += $(TOP)/frozen/Adafruit_CircuitPython_NeoPixel
+diff --git a/ports/espressif/boards/waveshare_esp32_s3_pico_c/pins.c b/ports/espressif/boards/waveshare_esp32_s3_pico_c/pins.c
+new file mode 100644
+index 0000000000..a2c3da3259
+--- /dev/null
++++ b/ports/espressif/boards/waveshare_esp32_s3_pico_c/pins.c
+@@ -0,0 +1,51 @@
++#include "shared-bindings/board/__init__.h"
++
++STATIC const mp_rom_map_elem_t board_module_globals_table[] = {
++    CIRCUITPYTHON_BOARD_DICT_STANDARD_ITEMS
++
++    { MP_ROM_QSTR(MP_QSTR_GP0), MP_ROM_PTR(&pin_GPIO11) },
++    { MP_ROM_QSTR(MP_QSTR_GP1), MP_ROM_PTR(&pin_GPIO12) },
++    { MP_ROM_QSTR(MP_QSTR_GP2), MP_ROM_PTR(&pin_GPIO13) },
++    { MP_ROM_QSTR(MP_QSTR_GP3), MP_ROM_PTR(&pin_GPIO14) },
++    { MP_ROM_QSTR(MP_QSTR_GP4), MP_ROM_PTR(&pin_GPIO15) },
++    { MP_ROM_QSTR(MP_QSTR_GP5), MP_ROM_PTR(&pin_GPIO16) },
++    { MP_ROM_QSTR(MP_QSTR_GP6), MP_ROM_PTR(&pin_GPIO17) },
++    { MP_ROM_QSTR(MP_QSTR_GP7), MP_ROM_PTR(&pin_GPIO18) },
++    { MP_ROM_QSTR(MP_QSTR_GP8), MP_ROM_PTR(&pin_GPIO33) },
++    { MP_ROM_QSTR(MP_QSTR_GP9), MP_ROM_PTR(&pin_GPIO34) },
++    { MP_ROM_QSTR(MP_QSTR_GP10), MP_ROM_PTR(&pin_GPIO35) },
++    { MP_ROM_QSTR(MP_QSTR_GP11), MP_ROM_PTR(&pin_GPIO36) },
++    { MP_ROM_QSTR(MP_QSTR_GP12), MP_ROM_PTR(&pin_GPIO37) },
++    { MP_ROM_QSTR(MP_QSTR_GP13), MP_ROM_PTR(&pin_GPIO38) },
++    { MP_ROM_QSTR(MP_QSTR_GP14), MP_ROM_PTR(&pin_GPIO39) },
++    { MP_ROM_QSTR(MP_QSTR_GP15), MP_ROM_PTR(&pin_GPIO40) },
++    { MP_ROM_QSTR(MP_QSTR_GP16), MP_ROM_PTR(&pin_GPIO42) },
++    { MP_ROM_QSTR(MP_QSTR_GP17), MP_ROM_PTR(&pin_GPIO41) },
++    { MP_ROM_QSTR(MP_QSTR_GP18), MP_ROM_PTR(&pin_GPIO1) },
++    { MP_ROM_QSTR(MP_QSTR_GP19), MP_ROM_PTR(&pin_GPIO2) },
++    { MP_ROM_QSTR(MP_QSTR_GP20), MP_ROM_PTR(&pin_GPIO4) },
++    { MP_ROM_QSTR(MP_QSTR_GP21), MP_ROM_PTR(&pin_GPIO5) },
++    { MP_ROM_QSTR(MP_QSTR_GP22), MP_ROM_PTR(&pin_GPIO6) },
++
++    { MP_ROM_QSTR(MP_QSTR_NEOPIXEL), MP_ROM_PTR(&pin_GPIO21) },
++
++    { MP_ROM_QSTR(MP_QSTR_GP26), MP_ROM_PTR(&pin_GPIO7) },
++    { MP_ROM_QSTR(MP_QSTR_GP26_A0), MP_ROM_PTR(&pin_GPIO7) },
++    { MP_ROM_QSTR(MP_QSTR_A0), MP_ROM_PTR(&pin_GPIO7) },
++
++    { MP_ROM_QSTR(MP_QSTR_GP27), MP_ROM_PTR(&pin_GPIO8) },
++    { MP_ROM_QSTR(MP_QSTR_GP27_A1), MP_ROM_PTR(&pin_GPIO8) },
++    { MP_ROM_QSTR(MP_QSTR_A1), MP_ROM_PTR(&pin_GPIO8) },
++
++    { MP_ROM_QSTR(MP_QSTR_GP28), MP_ROM_PTR(&pin_GPIO9) },
++    { MP_ROM_QSTR(MP_QSTR_GP28_A2), MP_ROM_PTR(&pin_GPIO9) },
++    { MP_ROM_QSTR(MP_QSTR_A2), MP_ROM_PTR(&pin_GPIO9) },
++
++    // connected to pin 35, which is ADC_VREF on the Pico
++    { MP_ROM_QSTR(MP_QSTR_VOLTAGE_MONITOR), MP_ROM_PTR(&pin_GPIO10) },
++    { MP_ROM_QSTR(MP_QSTR_A3), MP_ROM_PTR(&pin_GPIO10) },
++
++    { MP_ROM_QSTR(MP_QSTR_STEMMA_I2C), MP_ROM_PTR(&board_i2c_obj) },
++    { MP_ROM_QSTR(MP_QSTR_VBUS_SENSE), MP_ROM_PTR(&pin_GPIO3) },
++};
++MP_DEFINE_CONST_DICT(board_module_globals, board_module_globals_table);
+diff --git a/ports/espressif/boards/waveshare_esp32_s3_pico_c/sdkconfig b/ports/espressif/boards/waveshare_esp32_s3_pico_c/sdkconfig
+new file mode 100644
+index 0000000000..f5ef797681
+--- /dev/null
++++ b/ports/espressif/boards/waveshare_esp32_s3_pico_c/sdkconfig
+@@ -0,0 +1,15 @@
++#
++# Espressif IoT Development Framework Configuration
++#
++#
++# Component config
++#
++#
++# LWIP
++#
++CONFIG_LWIP_LOCAL_HOSTNAME="espressif-esp32s3"
++# end of LWIP
++
++# end of Component config
++
++# end of Espressif IoT Development Framework Configuration
+diff --git a/ports/espressif/boards/waveshare_esp32_s3_pico_ws35/board.c b/ports/espressif/boards/waveshare_esp32_s3_pico_ws35/board.c
+new file mode 100644
+index 0000000000..164430c88c
+--- /dev/null
++++ b/ports/espressif/boards/waveshare_esp32_s3_pico_ws35/board.c
+@@ -0,0 +1,29 @@
++/*
++ * This file is part of the MicroPython project, http://micropython.org/
++ *
++ * The MIT License (MIT)
++ *
++ * Copyright (c) 2020 Scott Shawcroft for Adafruit Industries
++ *
++ * Permission is hereby granted, free of charge, to any person obtaining a copy
++ * of this software and associated documentation files (the "Software"), to deal
++ * in the Software without restriction, including without limitation the rights
++ * to use, copy, modify, merge, publish, distribute, sublicense, and/or sell
++ * copies of the Software, and to permit persons to whom the Software is
++ * furnished to do so, subject to the following conditions:
++ *
++ * The above copyright notice and this permission notice shall be included in
++ * all copies or substantial portions of the Software.
++ *
++ * THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND, EXPRESS OR
++ * IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF MERCHANTABILITY,
++ * FITNESS FOR A PARTICULAR PURPOSE AND NONINFRINGEMENT. IN NO EVENT SHALL THE
++ * AUTHORS OR COPYRIGHT HOLDERS BE LIABLE FOR ANY CLAIM, DAMAGES OR OTHER
++ * LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM,
++ * OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN
++ * THE SOFTWARE.
++ */
++
++#include "supervisor/board.h"
++
++// Use the MP_WEAK supervisor/shared/board.c versions of routines not defined here.
+diff --git a/ports/espressif/boards/waveshare_esp32_s3_pico_ws35/mpconfigboard.h b/ports/espressif/boards/waveshare_esp32_s3_pico_ws35/mpconfigboard.h
+new file mode 100644
+index 0000000000..51c709028a
+--- /dev/null
++++ b/ports/espressif/boards/waveshare_esp32_s3_pico_ws35/mpconfigboard.h
+@@ -0,0 +1,35 @@
++/*
++ * This file is part of the MicroPython project, http://micropython.org/
++ *
++ * The MIT License (MIT)
++ *
++ * Copyright (c) 2019 Scott Shawcroft for Adafruit Industries
++ *
++ * Permission is hereby granted, free of charge, to any person obtaining a copy
++ * of this software and associated documentation files (the "Software"), to deal
++ * in the Software without restriction, including without limitation the rights
++ * to use, copy, modify, merge, publish, distribute, sublicense, and/or sell
++ * copies of the Software, and to permit persons to whom the Software is
++ * furnished to do so, subject to the following conditions:
++ *
++ * The above copyright notice and this permission notice shall be included in
++ * all copies or substantial portions of the Software.
++ *
++ * THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND, EXPRESS OR
++ * IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF MERCHANTABILITY,
++ * FITNESS FOR A PARTICULAR PURPOSE AND NONINFRINGEMENT. IN NO EVENT SHALL THE
++ * AUTHORS OR COPYRIGHT HOLDERS BE LIABLE FOR ANY CLAIM, DAMAGES OR OTHER
++ * LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM,
++ * OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN
++ * THE SOFTWARE.
++ */
++
++// Micropython setup
++
++#define MICROPY_HW_BOARD_NAME       "Waveshare ESP32-S3-Pico WS35"
++#define MICROPY_HW_MCU_NAME         "ESP32S3"
++
++#define MICROPY_HW_NEOPIXEL         (&pin_GPIO21)
++
++#define CIRCUITPY_BOARD_I2C         (1)
++#define CIRCUITPY_BOARD_I2C_PIN     {{.scl = &pin_GPIO16, .sda = &pin_GPIO15}}
+diff --git a/ports/espressif/boards/waveshare_esp32_s3_pico_ws35/mpconfigboard.mk b/ports/espressif/boards/waveshare_esp32_s3_pico_ws35/mpconfigboard.mk
+new file mode 100644
+index 0000000000..b848561ba9
+--- /dev/null
++++ b/ports/espressif/boards/waveshare_esp32_s3_pico_ws35/mpconfigboard.mk
+@@ -0,0 +1,17 @@
++USB_VID = 0x303a
++USB_PID = 0x81A3
++USB_PRODUCT = "ESP32-S3-Pico"
++USB_MANUFACTURER = "Waveshare Electronics"
++
++IDF_TARGET = esp32s3
++
++CIRCUITPY_ESP_FLASH_MODE = qio
++CIRCUITPY_ESP_FLASH_FREQ = 80m
++CIRCUITPY_ESP_FLASH_SIZE = 16MB
++
++CIRCUITPY_ESP_PSRAM_SIZE = 2MB
++CIRCUITPY_ESP_PSRAM_MODE = qio
++CIRCUITPY_ESP_PSRAM_FREQ = 80m
++
++FROZEN_MPY_DIRS += $(TOP)/frozen/ili9488_waveshare35
++FROZEN_MPY_DIRS += $(TOP)/frozen/Adafruit_CircuitPython_NeoPixel
+diff --git a/ports/espressif/boards/waveshare_esp32_s3_pico_ws35/pins.c b/ports/espressif/boards/waveshare_esp32_s3_pico_ws35/pins.c
+new file mode 100644
+index 0000000000..a2c3da3259
+--- /dev/null
++++ b/ports/espressif/boards/waveshare_esp32_s3_pico_ws35/pins.c
+@@ -0,0 +1,51 @@
++#include "shared-bindings/board/__init__.h"
++
++STATIC const mp_rom_map_elem_t board_module_globals_table[] = {
++    CIRCUITPYTHON_BOARD_DICT_STANDARD_ITEMS
++
++    { MP_ROM_QSTR(MP_QSTR_GP0), MP_ROM_PTR(&pin_GPIO11) },
++    { MP_ROM_QSTR(MP_QSTR_GP1), MP_ROM_PTR(&pin_GPIO12) },
++    { MP_ROM_QSTR(MP_QSTR_GP2), MP_ROM_PTR(&pin_GPIO13) },
++    { MP_ROM_QSTR(MP_QSTR_GP3), MP_ROM_PTR(&pin_GPIO14) },
++    { MP_ROM_QSTR(MP_QSTR_GP4), MP_ROM_PTR(&pin_GPIO15) },
++    { MP_ROM_QSTR(MP_QSTR_GP5), MP_ROM_PTR(&pin_GPIO16) },
++    { MP_ROM_QSTR(MP_QSTR_GP6), MP_ROM_PTR(&pin_GPIO17) },
++    { MP_ROM_QSTR(MP_QSTR_GP7), MP_ROM_PTR(&pin_GPIO18) },
++    { MP_ROM_QSTR(MP_QSTR_GP8), MP_ROM_PTR(&pin_GPIO33) },
++    { MP_ROM_QSTR(MP_QSTR_GP9), MP_ROM_PTR(&pin_GPIO34) },
++    { MP_ROM_QSTR(MP_QSTR_GP10), MP_ROM_PTR(&pin_GPIO35) },
++    { MP_ROM_QSTR(MP_QSTR_GP11), MP_ROM_PTR(&pin_GPIO36) },
++    { MP_ROM_QSTR(MP_QSTR_GP12), MP_ROM_PTR(&pin_GPIO37) },
++    { MP_ROM_QSTR(MP_QSTR_GP13), MP_ROM_PTR(&pin_GPIO38) },
++    { MP_ROM_QSTR(MP_QSTR_GP14), MP_ROM_PTR(&pin_GPIO39) },
++    { MP_ROM_QSTR(MP_QSTR_GP15), MP_ROM_PTR(&pin_GPIO40) },
++    { MP_ROM_QSTR(MP_QSTR_GP16), MP_ROM_PTR(&pin_GPIO42) },
++    { MP_ROM_QSTR(MP_QSTR_GP17), MP_ROM_PTR(&pin_GPIO41) },
++    { MP_ROM_QSTR(MP_QSTR_GP18), MP_ROM_PTR(&pin_GPIO1) },
++    { MP_ROM_QSTR(MP_QSTR_GP19), MP_ROM_PTR(&pin_GPIO2) },
++    { MP_ROM_QSTR(MP_QSTR_GP20), MP_ROM_PTR(&pin_GPIO4) },
++    { MP_ROM_QSTR(MP_QSTR_GP21), MP_ROM_PTR(&pin_GPIO5) },
++    { MP_ROM_QSTR(MP_QSTR_GP22), MP_ROM_PTR(&pin_GPIO6) },
++
++    { MP_ROM_QSTR(MP_QSTR_NEOPIXEL), MP_ROM_PTR(&pin_GPIO21) },
++
++    { MP_ROM_QSTR(MP_QSTR_GP26), MP_ROM_PTR(&pin_GPIO7) },
++    { MP_ROM_QSTR(MP_QSTR_GP26_A0), MP_ROM_PTR(&pin_GPIO7) },
++    { MP_ROM_QSTR(MP_QSTR_A0), MP_ROM_PTR(&pin_GPIO7) },
++
++    { MP_ROM_QSTR(MP_QSTR_GP27), MP_ROM_PTR(&pin_GPIO8) },
++    { MP_ROM_QSTR(MP_QSTR_GP27_A1), MP_ROM_PTR(&pin_GPIO8) },
++    { MP_ROM_QSTR(MP_QSTR_A1), MP_ROM_PTR(&pin_GPIO8) },
++
++    { MP_ROM_QSTR(MP_QSTR_GP28), MP_ROM_PTR(&pin_GPIO9) },
++    { MP_ROM_QSTR(MP_QSTR_GP28_A2), MP_ROM_PTR(&pin_GPIO9) },
++    { MP_ROM_QSTR(MP_QSTR_A2), MP_ROM_PTR(&pin_GPIO9) },
++
++    // connected to pin 35, which is ADC_VREF on the Pico
++    { MP_ROM_QSTR(MP_QSTR_VOLTAGE_MONITOR), MP_ROM_PTR(&pin_GPIO10) },
++    { MP_ROM_QSTR(MP_QSTR_A3), MP_ROM_PTR(&pin_GPIO10) },
++
++    { MP_ROM_QSTR(MP_QSTR_STEMMA_I2C), MP_ROM_PTR(&board_i2c_obj) },
++    { MP_ROM_QSTR(MP_QSTR_VBUS_SENSE), MP_ROM_PTR(&pin_GPIO3) },
++};
++MP_DEFINE_CONST_DICT(board_module_globals, board_module_globals_table);
+diff --git a/ports/espressif/boards/waveshare_esp32_s3_pico_ws35/sdkconfig b/ports/espressif/boards/waveshare_esp32_s3_pico_ws35/sdkconfig
+new file mode 100644
+index 0000000000..f5ef797681
+--- /dev/null
++++ b/ports/espressif/boards/waveshare_esp32_s3_pico_ws35/sdkconfig
+@@ -0,0 +1,15 @@
++#
++# Espressif IoT Development Framework Configuration
++#
++#
++# Component config
++#
++#
++# LWIP
++#
++CONFIG_LWIP_LOCAL_HOSTNAME="espressif-esp32s3"
++# end of LWIP
++
++# end of Component config
++
++# end of Espressif IoT Development Framework Configuration
+diff --git a/ports/raspberrypi/boards/pico_zero_base_rev2/board.c b/ports/raspberrypi/boards/pico_zero_base_rev2/board.c
+new file mode 100644
+index 0000000000..331653173e
+--- /dev/null
++++ b/ports/raspberrypi/boards/pico_zero_base_rev2/board.c
+@@ -0,0 +1,29 @@
++/*
++ * This file is part of the MicroPython project, http://micropython.org/
++ *
++ * The MIT License (MIT)
++ *
++ * Copyright (c) 2021 Scott Shawcroft for Adafruit Industries
++ *
++ * Permission is hereby granted, free of charge, to any person obtaining a copy
++ * of this software and associated documentation files (the "Software"), to deal
++ * in the Software without restriction, including without limitation the rights
++ * to use, copy, modify, merge, publish, distribute, sublicense, and/or sell
++ * copies of the Software, and to permit persons to whom the Software is
++ * furnished to do so, subject to the following conditions:
++ *
++ * The above copyright notice and this permission notice shall be included in
++ * all copies or substantial portions of the Software.
++ *
++ * THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND, EXPRESS OR
++ * IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF MERCHANTABILITY,
++ * FITNESS FOR A PARTICULAR PURPOSE AND NONINFRINGEMENT. IN NO EVENT SHALL THE
++ * AUTHORS OR COPYRIGHT HOLDERS BE LIABLE FOR ANY CLAIM, DAMAGES OR OTHER
++ * LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM,
++ * OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN
++ * THE SOFTWARE.
++ */
++
++#include "supervisor/board.h"
++
++// Use the MP_WEAK supervisor/shared/board.c versions of routines not defined here.
+diff --git a/ports/raspberrypi/boards/pico_zero_base_rev2/mpconfigboard.h b/ports/raspberrypi/boards/pico_zero_base_rev2/mpconfigboard.h
+new file mode 100644
+index 0000000000..7602a9558b
+--- /dev/null
++++ b/ports/raspberrypi/boards/pico_zero_base_rev2/mpconfigboard.h
+@@ -0,0 +1,15 @@
++#define MICROPY_HW_BOARD_NAME "Pico Zero Base Rev2"
++#define MICROPY_HW_MCU_NAME "rp2040"
++
++#define MICROPY_HW_LED_STATUS (&pin_GPIO25)
++
++#define CIRCUITPY_BOARD_I2C         (1)
++#define CIRCUITPY_BOARD_I2C_PIN     {{.scl = &pin_GPIO3, .sda = &pin_GPIO2}}
++
++#define DEFAULT_SPI_BUS_SCK         (&pin_GPIO10)
++#define DEFAULT_SPI_BUS_MISO        (&pin_GPIO12)
++#define DEFAULT_SPI_BUS_MOSI        (&pin_GPIO11)
++
++
++#define CIRCUITPY_BOARD_UART        (1)
++#define CIRCUITPY_BOARD_UART_PIN    {{.tx = &pin_GPIO0, .rx = &pin_GPIO1}}
+diff --git a/ports/raspberrypi/boards/pico_zero_base_rev2/mpconfigboard.mk b/ports/raspberrypi/boards/pico_zero_base_rev2/mpconfigboard.mk
+new file mode 100644
+index 0000000000..f5e20673f2
+--- /dev/null
++++ b/ports/raspberrypi/boards/pico_zero_base_rev2/mpconfigboard.mk
+@@ -0,0 +1,21 @@
++USB_VID = 0x239A
++USB_PID = 0x80F4
++USB_PRODUCT = "Pico"
++USB_MANUFACTURER = "Raspberry Pi"
++
++CHIP_VARIANT = RP2040
++CHIP_FAMILY = rp2
++
++EXTERNAL_FLASH_DEVICES = "W25Q16JVxQ"
++
++CIRCUITPY__EVE = 1
++
++# slim build
++CIRCUITPY_PICODVI = 0
++CIRCUITPY_USB_HOST = 0
++CIRCUITPY_USB_VIDEO = 0
++CIRCUITPY_WEB_WORKFLOW = 0
++CIRCUITPY_MDNS = 0
++CIRCUITPY_BLEIO_HCI = 0
++CIRCUITPY_BLEIO = 0
++CIRCUITPY_STATUS_BAR = 0
+diff --git a/ports/raspberrypi/boards/pico_zero_base_rev2/pico-sdk-configboard.h b/ports/raspberrypi/boards/pico_zero_base_rev2/pico-sdk-configboard.h
+new file mode 100644
+index 0000000000..36da55d457
+--- /dev/null
++++ b/ports/raspberrypi/boards/pico_zero_base_rev2/pico-sdk-configboard.h
+@@ -0,0 +1 @@
++// Put board-specific pico-sdk definitions here. This file must exist.
+diff --git a/ports/raspberrypi/boards/pico_zero_base_rev2/pins.c b/ports/raspberrypi/boards/pico_zero_base_rev2/pins.c
+new file mode 100644
+index 0000000000..cb5fbf8313
+--- /dev/null
++++ b/ports/raspberrypi/boards/pico_zero_base_rev2/pins.c
+@@ -0,0 +1,118 @@
++#include "shared-bindings/board/__init__.h"
++
++STATIC const mp_rom_map_elem_t board_module_globals_table[] = {
++    CIRCUITPYTHON_BOARD_DICT_STANDARD_ITEMS
++
++    { MP_ROM_QSTR(MP_QSTR_GP0), MP_ROM_PTR(&pin_GPIO0) },
++    { MP_ROM_QSTR(MP_QSTR_GP1), MP_ROM_PTR(&pin_GPIO1) },
++    { MP_ROM_QSTR(MP_QSTR_GP2), MP_ROM_PTR(&pin_GPIO2) },
++    { MP_ROM_QSTR(MP_QSTR_GP3), MP_ROM_PTR(&pin_GPIO3) },
++    { MP_ROM_QSTR(MP_QSTR_GP4), MP_ROM_PTR(&pin_GPIO4) },
++    { MP_ROM_QSTR(MP_QSTR_GP5), MP_ROM_PTR(&pin_GPIO5) },
++    { MP_ROM_QSTR(MP_QSTR_GP6), MP_ROM_PTR(&pin_GPIO6) },
++    { MP_ROM_QSTR(MP_QSTR_GP7), MP_ROM_PTR(&pin_GPIO7) },
++    { MP_ROM_QSTR(MP_QSTR_GP8), MP_ROM_PTR(&pin_GPIO8) },
++    { MP_ROM_QSTR(MP_QSTR_GP9), MP_ROM_PTR(&pin_GPIO9) },
++    { MP_ROM_QSTR(MP_QSTR_GP10), MP_ROM_PTR(&pin_GPIO10) },
++    { MP_ROM_QSTR(MP_QSTR_GP11), MP_ROM_PTR(&pin_GPIO11) },
++    { MP_ROM_QSTR(MP_QSTR_GP12), MP_ROM_PTR(&pin_GPIO12) },
++    { MP_ROM_QSTR(MP_QSTR_GP13), MP_ROM_PTR(&pin_GPIO13) },
++    { MP_ROM_QSTR(MP_QSTR_GP14), MP_ROM_PTR(&pin_GPIO14) },
++    { MP_ROM_QSTR(MP_QSTR_GP15), MP_ROM_PTR(&pin_GPIO15) },
++    { MP_ROM_QSTR(MP_QSTR_GP16), MP_ROM_PTR(&pin_GPIO16) },
++    { MP_ROM_QSTR(MP_QSTR_GP17), MP_ROM_PTR(&pin_GPIO17) },
++    { MP_ROM_QSTR(MP_QSTR_GP18), MP_ROM_PTR(&pin_GPIO18) },
++    { MP_ROM_QSTR(MP_QSTR_GP19), MP_ROM_PTR(&pin_GPIO19) },
++    { MP_ROM_QSTR(MP_QSTR_GP20), MP_ROM_PTR(&pin_GPIO20) },
++    { MP_ROM_QSTR(MP_QSTR_GP21), MP_ROM_PTR(&pin_GPIO21) },
++    { MP_ROM_QSTR(MP_QSTR_GP22), MP_ROM_PTR(&pin_GPIO22) },
++    { MP_ROM_QSTR(MP_QSTR_GP26), MP_ROM_PTR(&pin_GPIO26) },
++    { MP_ROM_QSTR(MP_QSTR_GP27), MP_ROM_PTR(&pin_GPIO27) },
++    { MP_ROM_QSTR(MP_QSTR_GP28), MP_ROM_PTR(&pin_GPIO28) },
++
++    { MP_ROM_QSTR(MP_QSTR_GPIO14), MP_ROM_PTR(&pin_GPIO0) },
++    { MP_ROM_QSTR(MP_QSTR_TX), MP_ROM_PTR(&pin_GPIO0) },
++
++    { MP_ROM_QSTR(MP_QSTR_GPIO15), MP_ROM_PTR(&pin_GPIO1) },
++    { MP_ROM_QSTR(MP_QSTR_RX), MP_ROM_PTR(&pin_GPIO1) },
++
++    { MP_ROM_QSTR(MP_QSTR_GPIO2), MP_ROM_PTR(&pin_GPIO2) },
++    { MP_ROM_QSTR(MP_QSTR_SDA), MP_ROM_PTR(&pin_GPIO2) },
++
++    { MP_ROM_QSTR(MP_QSTR_GPIO3), MP_ROM_PTR(&pin_GPIO3) },
++    { MP_ROM_QSTR(MP_QSTR_SCL), MP_ROM_PTR(&pin_GPIO3) },
++
++    { MP_ROM_QSTR(MP_QSTR_GPIO4), MP_ROM_PTR(&pin_GPIO4) },
++
++    { MP_ROM_QSTR(MP_QSTR_GPIO17), MP_ROM_PTR(&pin_GPIO5) },
++
++    { MP_ROM_QSTR(MP_QSTR_GPIO27), MP_ROM_PTR(&pin_GPIO6) },
++
++    { MP_ROM_QSTR(MP_QSTR_GPIO22), MP_ROM_PTR(&pin_GPIO7) },
++
++    { MP_ROM_QSTR(MP_QSTR_GPIO23), MP_ROM_PTR(&pin_GPIO8) },
++
++    { MP_ROM_QSTR(MP_QSTR_GPIO8), MP_ROM_PTR(&pin_GPIO9) },
++    { MP_ROM_QSTR(MP_QSTR_CE0), MP_ROM_PTR(&pin_GPIO9) },
++
++    { MP_ROM_QSTR(MP_QSTR_GPIO11), MP_ROM_PTR(&pin_GPIO10) },
++    { MP_ROM_QSTR(MP_QSTR_SCLK), MP_ROM_PTR(&pin_GPIO10) },
++
++    { MP_ROM_QSTR(MP_QSTR_GPIO10), MP_ROM_PTR(&pin_GPIO11) },
++    { MP_ROM_QSTR(MP_QSTR_MOSI), MP_ROM_PTR(&pin_GPIO11) },
++
++    { MP_ROM_QSTR(MP_QSTR_GPIO9), MP_ROM_PTR(&pin_GPIO12) },
++    { MP_ROM_QSTR(MP_QSTR_MISO), MP_ROM_PTR(&pin_GPIO12) },
++
++    { MP_ROM_QSTR(MP_QSTR_GPIO6), MP_ROM_PTR(&pin_GPIO13) },
++
++    { MP_ROM_QSTR(MP_QSTR_GPIO13), MP_ROM_PTR(&pin_GPIO14) },
++
++    { MP_ROM_QSTR(MP_QSTR_GPIO26), MP_ROM_PTR(&pin_GPIO15) },
++
++    { MP_ROM_QSTR(MP_QSTR_GPIO21), MP_ROM_PTR(&pin_GPIO16) },
++
++    { MP_ROM_QSTR(MP_QSTR_GPIO20), MP_ROM_PTR(&pin_GPIO17) },
++
++    { MP_ROM_QSTR(MP_QSTR_GPIO18), MP_ROM_PTR(&pin_GPIO18) },
++
++    { MP_ROM_QSTR(MP_QSTR_GPIO19), MP_ROM_PTR(&pin_GPIO19) },
++
++    { MP_ROM_QSTR(MP_QSTR_GPIO16), MP_ROM_PTR(&pin_GPIO20) },
++
++    { MP_ROM_QSTR(MP_QSTR_GPIO12), MP_ROM_PTR(&pin_GPIO21) },
++
++    { MP_ROM_QSTR(MP_QSTR_GPIO5), MP_ROM_PTR(&pin_GPIO22) },
++
++    { MP_ROM_QSTR(MP_QSTR_GPIO7),  MP_ROM_PTR(&pin_GPIO26) },
++    { MP_ROM_QSTR(MP_QSTR_CE1),    MP_ROM_PTR(&pin_GPIO26) },
++
++    { MP_ROM_QSTR(MP_QSTR_GPIO25), MP_ROM_PTR(&pin_GPIO27) },
++
++    { MP_ROM_QSTR(MP_QSTR_GPIO24), MP_ROM_PTR(&pin_GPIO28) },
++
++    { MP_ROM_QSTR(MP_QSTR_SMPS_MODE), MP_ROM_PTR(&pin_GPIO23) },
++    { MP_ROM_QSTR(MP_QSTR_GP23), MP_ROM_PTR(&pin_GPIO23) },
++
++    { MP_ROM_QSTR(MP_QSTR_VBUS_SENSE), MP_ROM_PTR(&pin_GPIO24) },
++    { MP_ROM_QSTR(MP_QSTR_GP24), MP_ROM_PTR(&pin_GPIO24) },
++
++    { MP_ROM_QSTR(MP_QSTR_LED), MP_ROM_PTR(&pin_GPIO25) },
++    { MP_ROM_QSTR(MP_QSTR_GP25), MP_ROM_PTR(&pin_GPIO25) },
++
++    { MP_ROM_QSTR(MP_QSTR_GP26_A0), MP_ROM_PTR(&pin_GPIO26) },
++    { MP_ROM_QSTR(MP_QSTR_A0), MP_ROM_PTR(&pin_GPIO26) },
++
++    { MP_ROM_QSTR(MP_QSTR_GP27_A1), MP_ROM_PTR(&pin_GPIO27) },
++    { MP_ROM_QSTR(MP_QSTR_A1), MP_ROM_PTR(&pin_GPIO27) },
++
++    { MP_ROM_QSTR(MP_QSTR_GP28_A2), MP_ROM_PTR(&pin_GPIO28) },
++    { MP_ROM_QSTR(MP_QSTR_A2), MP_ROM_PTR(&pin_GPIO28) },
++
++    { MP_ROM_QSTR(MP_QSTR_VOLTAGE_MONITOR), MP_ROM_PTR(&pin_GPIO29) },
++    { MP_ROM_QSTR(MP_QSTR_A3), MP_ROM_PTR(&pin_GPIO29) },
++
++    { MP_ROM_QSTR(MP_QSTR_I2C), MP_ROM_PTR(&board_i2c_obj) },
++    { MP_ROM_QSTR(MP_QSTR_UART), MP_ROM_PTR(&board_uart_obj) },
++};
++MP_DEFINE_CONST_DICT(board_module_globals, board_module_globals_table);
+diff --git a/ports/raspberrypi/boards/picow_pi_base_rev1/board.c b/ports/raspberrypi/boards/picow_pi_base_rev1/board.c
+new file mode 100644
+index 0000000000..331653173e
+--- /dev/null
++++ b/ports/raspberrypi/boards/picow_pi_base_rev1/board.c
+@@ -0,0 +1,29 @@
++/*
++ * This file is part of the MicroPython project, http://micropython.org/
++ *
++ * The MIT License (MIT)
++ *
++ * Copyright (c) 2021 Scott Shawcroft for Adafruit Industries
++ *
++ * Permission is hereby granted, free of charge, to any person obtaining a copy
++ * of this software and associated documentation files (the "Software"), to deal
++ * in the Software without restriction, including without limitation the rights
++ * to use, copy, modify, merge, publish, distribute, sublicense, and/or sell
++ * copies of the Software, and to permit persons to whom the Software is
++ * furnished to do so, subject to the following conditions:
++ *
++ * The above copyright notice and this permission notice shall be included in
++ * all copies or substantial portions of the Software.
++ *
++ * THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND, EXPRESS OR
++ * IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF MERCHANTABILITY,
++ * FITNESS FOR A PARTICULAR PURPOSE AND NONINFRINGEMENT. IN NO EVENT SHALL THE
++ * AUTHORS OR COPYRIGHT HOLDERS BE LIABLE FOR ANY CLAIM, DAMAGES OR OTHER
++ * LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM,
++ * OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN
++ * THE SOFTWARE.
++ */
++
++#include "supervisor/board.h"
++
++// Use the MP_WEAK supervisor/shared/board.c versions of routines not defined here.
+diff --git a/ports/raspberrypi/boards/picow_pi_base_rev1/link.ld b/ports/raspberrypi/boards/picow_pi_base_rev1/link.ld
+new file mode 100644
+index 0000000000..e814bead4c
+--- /dev/null
++++ b/ports/raspberrypi/boards/picow_pi_base_rev1/link.ld
+@@ -0,0 +1 @@
++firmware_size = 1532k;
+diff --git a/ports/raspberrypi/boards/picow_pi_base_rev1/mpconfigboard.h b/ports/raspberrypi/boards/picow_pi_base_rev1/mpconfigboard.h
+new file mode 100644
+index 0000000000..1e2999faf5
+--- /dev/null
++++ b/ports/raspberrypi/boards/picow_pi_base_rev1/mpconfigboard.h
+@@ -0,0 +1,17 @@
++#define MICROPY_HW_BOARD_NAME "PicoW Pi Base Rev1"
++#define MICROPY_HW_MCU_NAME "rp2040"
++
++#define CIRCUITPY_DIGITALIO_HAVE_INVALID_PULL (1)
++#define CIRCUITPY_DIGITALIO_HAVE_INVALID_DRIVE_MODE (1)
++
++#define MICROPY_HW_LED_STATUS   (&pin_CYW0)
++
++#define CIRCUITPY_BOARD_I2C         (1)
++#define CIRCUITPY_BOARD_I2C_PIN     {{.scl = &pin_GPIO3, .sda = &pin_GPIO2}}
++
++#define DEFAULT_SPI_BUS_SCK         (&pin_GPIO18)
++#define DEFAULT_SPI_BUS_MISO        (&pin_GPIO16)
++#define DEFAULT_SPI_BUS_MOSI        (&pin_GPIO19)
++
++#define CIRCUITPY_BOARD_UART        (1)
++#define CIRCUITPY_BOARD_UART_PIN    {{.tx = &pin_GPIO4, .rx = &pin_GPIO5}}
+diff --git a/ports/raspberrypi/boards/picow_pi_base_rev1/mpconfigboard.mk b/ports/raspberrypi/boards/picow_pi_base_rev1/mpconfigboard.mk
+new file mode 100644
+index 0000000000..52261f7230
+--- /dev/null
++++ b/ports/raspberrypi/boards/picow_pi_base_rev1/mpconfigboard.mk
+@@ -0,0 +1,34 @@
++USB_VID = 0x239A
++USB_PID = 0x8120
++USB_PRODUCT = "Pico W"
++USB_MANUFACTURER = "Raspberry Pi"
++
++CHIP_VARIANT = RP2040
++CHIP_FAMILY = rp2
++
++EXTERNAL_FLASH_DEVICES = "W25Q16JVxQ"
++
++CIRCUITPY__EVE = 1
++
++CIRCUITPY_CYW43 = 1
++CIRCUITPY_SSL = 1
++CIRCUITPY_SSL_MBEDTLS = 1
++CIRCUITPY_HASHLIB = 1
++CIRCUITPY_WEB_WORKFLOW = 1
++CIRCUITPY_MDNS = 1
++CIRCUITPY_SOCKETPOOL = 1
++CIRCUITPY_WIFI = 1
++
++# slim build
++CIRCUITPY_PICODVI = 0
++CIRCUITPY_USB_HOST = 0
++CIRCUITPY_USB_VIDEO = 0
++CIRCUITPY_WEB_WORKFLOW = 0
++CIRCUITPY_MDNS = 0
++CIRCUITPY_BLEIO_HCI = 0
++CIRCUITPY_BLEIO = 0
++CIRCUITPY_STATUS_BAR = 0
++
++CFLAGS += -DCYW43_PIN_WL_HOST_WAKE=24 -DCYW43_PIN_WL_REG_ON=23 -DCYW43_WL_GPIO_COUNT=3 -DCYW43_WL_GPIO_LED_PIN=0
++# Must be accompanied by a linker script change
++CFLAGS += -DCIRCUITPY_FIRMWARE_SIZE='(1536 * 1024)'
+diff --git a/ports/raspberrypi/boards/picow_pi_base_rev1/pico-sdk-configboard.h b/ports/raspberrypi/boards/picow_pi_base_rev1/pico-sdk-configboard.h
+new file mode 100644
+index 0000000000..36da55d457
+--- /dev/null
++++ b/ports/raspberrypi/boards/picow_pi_base_rev1/pico-sdk-configboard.h
+@@ -0,0 +1 @@
++// Put board-specific pico-sdk definitions here. This file must exist.
+diff --git a/ports/raspberrypi/boards/picow_pi_base_rev1/pins.c b/ports/raspberrypi/boards/picow_pi_base_rev1/pins.c
+new file mode 100644
+index 0000000000..54d0af0e49
+--- /dev/null
++++ b/ports/raspberrypi/boards/picow_pi_base_rev1/pins.c
+@@ -0,0 +1,118 @@
++#include "shared-bindings/board/__init__.h"
++
++STATIC const mp_rom_map_elem_t board_module_globals_table[] = {
++    CIRCUITPYTHON_BOARD_DICT_STANDARD_ITEMS
++
++    { MP_ROM_QSTR(MP_QSTR_GP0), MP_ROM_PTR(&pin_GPIO0) },
++    { MP_ROM_QSTR(MP_QSTR_GP1), MP_ROM_PTR(&pin_GPIO1) },
++    { MP_ROM_QSTR(MP_QSTR_GP2), MP_ROM_PTR(&pin_GPIO2) },
++    { MP_ROM_QSTR(MP_QSTR_GP3), MP_ROM_PTR(&pin_GPIO3) },
++    { MP_ROM_QSTR(MP_QSTR_GP4), MP_ROM_PTR(&pin_GPIO4) },
++    { MP_ROM_QSTR(MP_QSTR_GP5), MP_ROM_PTR(&pin_GPIO5) },
++    { MP_ROM_QSTR(MP_QSTR_GP6), MP_ROM_PTR(&pin_GPIO6) },
++    { MP_ROM_QSTR(MP_QSTR_GP7), MP_ROM_PTR(&pin_GPIO7) },
++    { MP_ROM_QSTR(MP_QSTR_GP8), MP_ROM_PTR(&pin_GPIO8) },
++    { MP_ROM_QSTR(MP_QSTR_GP9), MP_ROM_PTR(&pin_GPIO9) },
++    { MP_ROM_QSTR(MP_QSTR_GP10), MP_ROM_PTR(&pin_GPIO10) },
++    { MP_ROM_QSTR(MP_QSTR_GP11), MP_ROM_PTR(&pin_GPIO11) },
++    { MP_ROM_QSTR(MP_QSTR_GP12), MP_ROM_PTR(&pin_GPIO12) },
++    { MP_ROM_QSTR(MP_QSTR_GP13), MP_ROM_PTR(&pin_GPIO13) },
++    { MP_ROM_QSTR(MP_QSTR_GP14), MP_ROM_PTR(&pin_GPIO14) },
++    { MP_ROM_QSTR(MP_QSTR_GP15), MP_ROM_PTR(&pin_GPIO15) },
++    { MP_ROM_QSTR(MP_QSTR_GP16), MP_ROM_PTR(&pin_GPIO16) },
++    { MP_ROM_QSTR(MP_QSTR_GP17), MP_ROM_PTR(&pin_GPIO17) },
++    { MP_ROM_QSTR(MP_QSTR_GP18), MP_ROM_PTR(&pin_GPIO18) },
++    { MP_ROM_QSTR(MP_QSTR_GP19), MP_ROM_PTR(&pin_GPIO19) },
++    { MP_ROM_QSTR(MP_QSTR_GP20), MP_ROM_PTR(&pin_GPIO20) },
++    { MP_ROM_QSTR(MP_QSTR_GP21), MP_ROM_PTR(&pin_GPIO21) },
++    { MP_ROM_QSTR(MP_QSTR_GP22), MP_ROM_PTR(&pin_GPIO22) },
++    { MP_ROM_QSTR(MP_QSTR_GP26), MP_ROM_PTR(&pin_GPIO26) },
++    { MP_ROM_QSTR(MP_QSTR_GP27), MP_ROM_PTR(&pin_GPIO27) },
++    { MP_ROM_QSTR(MP_QSTR_GP28), MP_ROM_PTR(&pin_GPIO28) },
++
++    { MP_ROM_QSTR(MP_QSTR_GPIO5), MP_ROM_PTR(&pin_GPIO0) },
++
++    { MP_ROM_QSTR(MP_QSTR_GPIO6), MP_ROM_PTR(&pin_GPIO1) },
++
++    { MP_ROM_QSTR(MP_QSTR_GPIO2), MP_ROM_PTR(&pin_GPIO2) },
++    { MP_ROM_QSTR(MP_QSTR_SDA),   MP_ROM_PTR(&pin_GPIO2) },
++
++    { MP_ROM_QSTR(MP_QSTR_GPIO3), MP_ROM_PTR(&pin_GPIO3) },
++    { MP_ROM_QSTR(MP_QSTR_SCL),   MP_ROM_PTR(&pin_GPIO3) },
++
++    { MP_ROM_QSTR(MP_QSTR_GPIO14), MP_ROM_PTR(&pin_GPIO4) },
++    { MP_ROM_QSTR(MP_QSTR_TX),    MP_ROM_PTR(&pin_GPIO4) },
++
++    { MP_ROM_QSTR(MP_QSTR_GPIO15), MP_ROM_PTR(&pin_GPIO5) },
++    { MP_ROM_QSTR(MP_QSTR_RX),     MP_ROM_PTR(&pin_GPIO5) },
++
++    { MP_ROM_QSTR(MP_QSTR_GPIO18), MP_ROM_PTR(&pin_GPIO6) },
++
++    { MP_ROM_QSTR(MP_QSTR_GPIO23), MP_ROM_PTR(&pin_GPIO7) },
++
++    { MP_ROM_QSTR(MP_QSTR_GPIO24), MP_ROM_PTR(&pin_GPIO8) },
++
++    { MP_ROM_QSTR(MP_QSTR_GPIO25), MP_ROM_PTR(&pin_GPIO9) },
++
++    { MP_ROM_QSTR(MP_QSTR_GPIO7), MP_ROM_PTR(&pin_GPIO10) },
++    { MP_ROM_QSTR(MP_QSTR_CE1),   MP_ROM_PTR(&pin_GPIO10) },
++
++    { MP_ROM_QSTR(MP_QSTR_GPIO12), MP_ROM_PTR(&pin_GPIO11) },
++
++    { MP_ROM_QSTR(MP_QSTR_GPIO19), MP_ROM_PTR(&pin_GPIO12) },
++    { MP_ROM_QSTR(MP_QSTR_MISO1), MP_ROM_PTR(&pin_GPIO12) },
++
++    { MP_ROM_QSTR(MP_QSTR_GPIO16), MP_ROM_PTR(&pin_GPIO13) },
++
++    { MP_ROM_QSTR(MP_QSTR_GPIO21), MP_ROM_PTR(&pin_GPIO14) },
++    { MP_ROM_QSTR(MP_QSTR_SCLK1),  MP_ROM_PTR(&pin_GPIO14) },
++
++    { MP_ROM_QSTR(MP_QSTR_GPIO20), MP_ROM_PTR(&pin_GPIO15) },
++    { MP_ROM_QSTR(MP_QSTR_MOSI1),  MP_ROM_PTR(&pin_GPIO15) },
++
++    { MP_ROM_QSTR(MP_QSTR_GPIO9), MP_ROM_PTR(&pin_GPIO16) },
++    { MP_ROM_QSTR(MP_QSTR_MISO),  MP_ROM_PTR(&pin_GPIO16) },
++
++    { MP_ROM_QSTR(MP_QSTR_GPIO8),  MP_ROM_PTR(&pin_GPIO17) },
++    { MP_ROM_QSTR(MP_QSTR_CE0),    MP_ROM_PTR(&pin_GPIO17) },
++
++    { MP_ROM_QSTR(MP_QSTR_GPIO11), MP_ROM_PTR(&pin_GPIO18) },
++    { MP_ROM_QSTR(MP_QSTR_SCLK),   MP_ROM_PTR(&pin_GPIO18) },
++
++    { MP_ROM_QSTR(MP_QSTR_GPIO10), MP_ROM_PTR(&pin_GPIO19) },
++    { MP_ROM_QSTR(MP_QSTR_MOSI),   MP_ROM_PTR(&pin_GPIO19) },
++
++    { MP_ROM_QSTR(MP_QSTR_GPIO22), MP_ROM_PTR(&pin_GPIO20) },
++
++    { MP_ROM_QSTR(MP_QSTR_GPIO27), MP_ROM_PTR(&pin_GPIO21) },
++
++    { MP_ROM_QSTR(MP_QSTR_GPIO17), MP_ROM_PTR(&pin_GPIO22) },
++
++    { MP_ROM_QSTR(MP_QSTR_GPIO26), MP_ROM_PTR(&pin_GPIO26) },
++
++    { MP_ROM_QSTR(MP_QSTR_GPIO13), MP_ROM_PTR(&pin_GPIO27) },
++
++    { MP_ROM_QSTR(MP_QSTR_GPIO4), MP_ROM_PTR(&pin_GPIO28) },
++
++    { MP_ROM_QSTR(MP_QSTR_SMPS_MODE), MP_ROM_PTR(&pin_CYW1) },
++
++    { MP_ROM_QSTR(MP_QSTR_LED), MP_ROM_PTR(&pin_CYW0) },
++
++    { MP_ROM_QSTR(MP_QSTR_VBUS_SENSE), MP_ROM_PTR(&pin_CYW2) },
++
++    { MP_ROM_QSTR(MP_QSTR_GP26_A0), MP_ROM_PTR(&pin_GPIO26) },
++    { MP_ROM_QSTR(MP_QSTR_A0), MP_ROM_PTR(&pin_GPIO26) },
++
++    { MP_ROM_QSTR(MP_QSTR_GP27_A1), MP_ROM_PTR(&pin_GPIO27) },
++    { MP_ROM_QSTR(MP_QSTR_A1), MP_ROM_PTR(&pin_GPIO27) },
++
++    { MP_ROM_QSTR(MP_QSTR_GP28_A2), MP_ROM_PTR(&pin_GPIO28) },
++    { MP_ROM_QSTR(MP_QSTR_A2), MP_ROM_PTR(&pin_GPIO28) },
++
++    { MP_ROM_QSTR(MP_QSTR_VOLTAGE_MONITOR), MP_ROM_PTR(&pin_GPIO29) },
++    { MP_ROM_QSTR(MP_QSTR_A3), MP_ROM_PTR(&pin_GPIO29) },
++
++    { MP_ROM_QSTR(MP_QSTR_I2C), MP_ROM_PTR(&board_i2c_obj) },
++    { MP_ROM_QSTR(MP_QSTR_UART), MP_ROM_PTR(&board_uart_obj) },
++};
++MP_DEFINE_CONST_DICT(board_module_globals, board_module_globals_table);
+diff --git a/ports/raspberrypi/boards/picow_pi_base_rev2/board.c b/ports/raspberrypi/boards/picow_pi_base_rev2/board.c
+new file mode 100644
+index 0000000000..331653173e
+--- /dev/null
++++ b/ports/raspberrypi/boards/picow_pi_base_rev2/board.c
+@@ -0,0 +1,29 @@
++/*
++ * This file is part of the MicroPython project, http://micropython.org/
++ *
++ * The MIT License (MIT)
++ *
++ * Copyright (c) 2021 Scott Shawcroft for Adafruit Industries
++ *
++ * Permission is hereby granted, free of charge, to any person obtaining a copy
++ * of this software and associated documentation files (the "Software"), to deal
++ * in the Software without restriction, including without limitation the rights
++ * to use, copy, modify, merge, publish, distribute, sublicense, and/or sell
++ * copies of the Software, and to permit persons to whom the Software is
++ * furnished to do so, subject to the following conditions:
++ *
++ * The above copyright notice and this permission notice shall be included in
++ * all copies or substantial portions of the Software.
++ *
++ * THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND, EXPRESS OR
++ * IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF MERCHANTABILITY,
++ * FITNESS FOR A PARTICULAR PURPOSE AND NONINFRINGEMENT. IN NO EVENT SHALL THE
++ * AUTHORS OR COPYRIGHT HOLDERS BE LIABLE FOR ANY CLAIM, DAMAGES OR OTHER
++ * LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM,
++ * OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN
++ * THE SOFTWARE.
++ */
++
++#include "supervisor/board.h"
++
++// Use the MP_WEAK supervisor/shared/board.c versions of routines not defined here.
+diff --git a/ports/raspberrypi/boards/picow_pi_base_rev2/link.ld b/ports/raspberrypi/boards/picow_pi_base_rev2/link.ld
+new file mode 100644
+index 0000000000..e814bead4c
+--- /dev/null
++++ b/ports/raspberrypi/boards/picow_pi_base_rev2/link.ld
+@@ -0,0 +1 @@
++firmware_size = 1532k;
+diff --git a/ports/raspberrypi/boards/picow_pi_base_rev2/mpconfigboard.h b/ports/raspberrypi/boards/picow_pi_base_rev2/mpconfigboard.h
+new file mode 100644
+index 0000000000..6752a63c36
+--- /dev/null
++++ b/ports/raspberrypi/boards/picow_pi_base_rev2/mpconfigboard.h
+@@ -0,0 +1,17 @@
++#define MICROPY_HW_BOARD_NAME "PicoW Pi Base Rev2"
++#define MICROPY_HW_MCU_NAME "rp2040"
++
++#define CIRCUITPY_DIGITALIO_HAVE_INVALID_PULL (1)
++#define CIRCUITPY_DIGITALIO_HAVE_INVALID_DRIVE_MODE (1)
++
++#define MICROPY_HW_LED_STATUS   (&pin_CYW0)
++
++#define CIRCUITPY_BOARD_I2C         (1)
++#define CIRCUITPY_BOARD_I2C_PIN     {{.scl = &pin_GPIO3, .sda = &pin_GPIO2}}
++
++#define DEFAULT_SPI_BUS_SCK         (&pin_GPIO18)
++#define DEFAULT_SPI_BUS_MISO        (&pin_GPIO16)
++#define DEFAULT_SPI_BUS_MOSI        (&pin_GPIO19)
++
++#define CIRCUITPY_BOARD_UART        (1)
++#define CIRCUITPY_BOARD_UART_PIN    {{.tx = &pin_GPIO4, .rx = &pin_GPIO5}}
+diff --git a/ports/raspberrypi/boards/picow_pi_base_rev2/mpconfigboard.mk b/ports/raspberrypi/boards/picow_pi_base_rev2/mpconfigboard.mk
+new file mode 100644
+index 0000000000..52261f7230
+--- /dev/null
++++ b/ports/raspberrypi/boards/picow_pi_base_rev2/mpconfigboard.mk
+@@ -0,0 +1,34 @@
++USB_VID = 0x239A
++USB_PID = 0x8120
++USB_PRODUCT = "Pico W"
++USB_MANUFACTURER = "Raspberry Pi"
++
++CHIP_VARIANT = RP2040
++CHIP_FAMILY = rp2
++
++EXTERNAL_FLASH_DEVICES = "W25Q16JVxQ"
++
++CIRCUITPY__EVE = 1
++
++CIRCUITPY_CYW43 = 1
++CIRCUITPY_SSL = 1
++CIRCUITPY_SSL_MBEDTLS = 1
++CIRCUITPY_HASHLIB = 1
++CIRCUITPY_WEB_WORKFLOW = 1
++CIRCUITPY_MDNS = 1
++CIRCUITPY_SOCKETPOOL = 1
++CIRCUITPY_WIFI = 1
++
++# slim build
++CIRCUITPY_PICODVI = 0
++CIRCUITPY_USB_HOST = 0
++CIRCUITPY_USB_VIDEO = 0
++CIRCUITPY_WEB_WORKFLOW = 0
++CIRCUITPY_MDNS = 0
++CIRCUITPY_BLEIO_HCI = 0
++CIRCUITPY_BLEIO = 0
++CIRCUITPY_STATUS_BAR = 0
++
++CFLAGS += -DCYW43_PIN_WL_HOST_WAKE=24 -DCYW43_PIN_WL_REG_ON=23 -DCYW43_WL_GPIO_COUNT=3 -DCYW43_WL_GPIO_LED_PIN=0
++# Must be accompanied by a linker script change
++CFLAGS += -DCIRCUITPY_FIRMWARE_SIZE='(1536 * 1024)'
+diff --git a/ports/raspberrypi/boards/picow_pi_base_rev2/pico-sdk-configboard.h b/ports/raspberrypi/boards/picow_pi_base_rev2/pico-sdk-configboard.h
+new file mode 100644
+index 0000000000..36da55d457
+--- /dev/null
++++ b/ports/raspberrypi/boards/picow_pi_base_rev2/pico-sdk-configboard.h
+@@ -0,0 +1 @@
++// Put board-specific pico-sdk definitions here. This file must exist.
+diff --git a/ports/raspberrypi/boards/picow_pi_base_rev2/pins.c b/ports/raspberrypi/boards/picow_pi_base_rev2/pins.c
+new file mode 100644
+index 0000000000..293f7ce564
+--- /dev/null
++++ b/ports/raspberrypi/boards/picow_pi_base_rev2/pins.c
+@@ -0,0 +1,119 @@
++#include "shared-bindings/board/__init__.h"
++
++STATIC const mp_rom_map_elem_t board_module_globals_table[] = {
++    CIRCUITPYTHON_BOARD_DICT_STANDARD_ITEMS
++
++    { MP_ROM_QSTR(MP_QSTR_GP0), MP_ROM_PTR(&pin_GPIO0) },
++    { MP_ROM_QSTR(MP_QSTR_GP1), MP_ROM_PTR(&pin_GPIO1) },
++    { MP_ROM_QSTR(MP_QSTR_GP2), MP_ROM_PTR(&pin_GPIO2) },
++    { MP_ROM_QSTR(MP_QSTR_GP3), MP_ROM_PTR(&pin_GPIO3) },
++    { MP_ROM_QSTR(MP_QSTR_GP4), MP_ROM_PTR(&pin_GPIO4) },
++    { MP_ROM_QSTR(MP_QSTR_GP5), MP_ROM_PTR(&pin_GPIO5) },
++    { MP_ROM_QSTR(MP_QSTR_GP6), MP_ROM_PTR(&pin_GPIO6) },
++    { MP_ROM_QSTR(MP_QSTR_GP7), MP_ROM_PTR(&pin_GPIO7) },
++    { MP_ROM_QSTR(MP_QSTR_GP8), MP_ROM_PTR(&pin_GPIO8) },
++    { MP_ROM_QSTR(MP_QSTR_GP9), MP_ROM_PTR(&pin_GPIO9) },
++    { MP_ROM_QSTR(MP_QSTR_GP10), MP_ROM_PTR(&pin_GPIO10) },
++    { MP_ROM_QSTR(MP_QSTR_GP11), MP_ROM_PTR(&pin_GPIO11) },
++    { MP_ROM_QSTR(MP_QSTR_GP12), MP_ROM_PTR(&pin_GPIO12) },
++    { MP_ROM_QSTR(MP_QSTR_GP13), MP_ROM_PTR(&pin_GPIO13) },
++    { MP_ROM_QSTR(MP_QSTR_GP14), MP_ROM_PTR(&pin_GPIO14) },
++    { MP_ROM_QSTR(MP_QSTR_GP15), MP_ROM_PTR(&pin_GPIO15) },
++    { MP_ROM_QSTR(MP_QSTR_GP16), MP_ROM_PTR(&pin_GPIO16) },
++    { MP_ROM_QSTR(MP_QSTR_GP17), MP_ROM_PTR(&pin_GPIO17) },
++    { MP_ROM_QSTR(MP_QSTR_GP18), MP_ROM_PTR(&pin_GPIO18) },
++    { MP_ROM_QSTR(MP_QSTR_GP19), MP_ROM_PTR(&pin_GPIO19) },
++    { MP_ROM_QSTR(MP_QSTR_GP20), MP_ROM_PTR(&pin_GPIO20) },
++    { MP_ROM_QSTR(MP_QSTR_GP21), MP_ROM_PTR(&pin_GPIO21) },
++    { MP_ROM_QSTR(MP_QSTR_GP22), MP_ROM_PTR(&pin_GPIO22) },
++    { MP_ROM_QSTR(MP_QSTR_GP26), MP_ROM_PTR(&pin_GPIO26) },
++    { MP_ROM_QSTR(MP_QSTR_GP27), MP_ROM_PTR(&pin_GPIO27) },
++    { MP_ROM_QSTR(MP_QSTR_GP28), MP_ROM_PTR(&pin_GPIO28) },
++
++    { MP_ROM_QSTR(MP_QSTR_GPIO5), MP_ROM_PTR(&pin_GPIO0) },
++
++    { MP_ROM_QSTR(MP_QSTR_GPIO6), MP_ROM_PTR(&pin_GPIO1) },
++
++    { MP_ROM_QSTR(MP_QSTR_GPIO2), MP_ROM_PTR(&pin_GPIO2) },
++    { MP_ROM_QSTR(MP_QSTR_SDA),   MP_ROM_PTR(&pin_GPIO2) },
++
++    { MP_ROM_QSTR(MP_QSTR_GPIO3), MP_ROM_PTR(&pin_GPIO3) },
++    { MP_ROM_QSTR(MP_QSTR_SCL),   MP_ROM_PTR(&pin_GPIO3) },
++
++    { MP_ROM_QSTR(MP_QSTR_GPIO14), MP_ROM_PTR(&pin_GPIO4) },
++    { MP_ROM_QSTR(MP_QSTR_TX),    MP_ROM_PTR(&pin_GPIO4) },
++
++    { MP_ROM_QSTR(MP_QSTR_GPIO15), MP_ROM_PTR(&pin_GPIO5) },
++    { MP_ROM_QSTR(MP_QSTR_RX),     MP_ROM_PTR(&pin_GPIO5) },
++
++    { MP_ROM_QSTR(MP_QSTR_GPIO23), MP_ROM_PTR(&pin_GPIO6) },
++
++    { MP_ROM_QSTR(MP_QSTR_GPIO18), MP_ROM_PTR(&pin_GPIO7) },
++
++    { MP_ROM_QSTR(MP_QSTR_GPIO19), MP_ROM_PTR(&pin_GPIO8) },
++    { MP_ROM_QSTR(MP_QSTR_MISO1),  MP_ROM_PTR(&pin_GPIO8) },
++
++    { MP_ROM_QSTR(MP_QSTR_GPIO25), MP_ROM_PTR(&pin_GPIO9) },
++
++    { MP_ROM_QSTR(MP_QSTR_GPIO7), MP_ROM_PTR(&pin_GPIO10) },
++    { MP_ROM_QSTR(MP_QSTR_CE1),   MP_ROM_PTR(&pin_GPIO10) },
++
++    { MP_ROM_QSTR(MP_QSTR_GPIO24), MP_ROM_PTR(&pin_GPIO11) },
++
++    { MP_ROM_QSTR(MP_QSTR_GPIO12), MP_ROM_PTR(&pin_GPIO12) },
++
++    { MP_ROM_QSTR(MP_QSTR_GPIO16), MP_ROM_PTR(&pin_GPIO13) },
++
++    { MP_ROM_QSTR(MP_QSTR_GPIO21), MP_ROM_PTR(&pin_GPIO14) },
++    { MP_ROM_QSTR(MP_QSTR_SCLK1),  MP_ROM_PTR(&pin_GPIO14) },
++
++    { MP_ROM_QSTR(MP_QSTR_GPIO20), MP_ROM_PTR(&pin_GPIO15) },
++    { MP_ROM_QSTR(MP_QSTR_MOSI1),  MP_ROM_PTR(&pin_GPIO15) },
++
++    { MP_ROM_QSTR(MP_QSTR_GPIO9), MP_ROM_PTR(&pin_GPIO16) },
++    { MP_ROM_QSTR(MP_QSTR_MISO),  MP_ROM_PTR(&pin_GPIO16) },
++
++    { MP_ROM_QSTR(MP_QSTR_GPIO8),  MP_ROM_PTR(&pin_GPIO17) },
++    { MP_ROM_QSTR(MP_QSTR_CE0),    MP_ROM_PTR(&pin_GPIO17) },
++
++    { MP_ROM_QSTR(MP_QSTR_GPIO11), MP_ROM_PTR(&pin_GPIO18) },
++    { MP_ROM_QSTR(MP_QSTR_SCLK),   MP_ROM_PTR(&pin_GPIO18) },
++
++    { MP_ROM_QSTR(MP_QSTR_GPIO10), MP_ROM_PTR(&pin_GPIO19) },
++    { MP_ROM_QSTR(MP_QSTR_MOSI),   MP_ROM_PTR(&pin_GPIO19) },
++
++    { MP_ROM_QSTR(MP_QSTR_GPIO22), MP_ROM_PTR(&pin_GPIO20) },
++
++    { MP_ROM_QSTR(MP_QSTR_GPIO27), MP_ROM_PTR(&pin_GPIO21) },
++
++    { MP_ROM_QSTR(MP_QSTR_GPIO17), MP_ROM_PTR(&pin_GPIO22) },
++
++    { MP_ROM_QSTR(MP_QSTR_GPIO26), MP_ROM_PTR(&pin_GPIO26) },
++    { MP_ROM_QSTR(MP_QSTR_SD_CS),  MP_ROM_PTR(&pin_GPIO26) },
++
++    { MP_ROM_QSTR(MP_QSTR_GPIO13), MP_ROM_PTR(&pin_GPIO27) },
++
++    { MP_ROM_QSTR(MP_QSTR_GPIO4), MP_ROM_PTR(&pin_GPIO28) },
++
++    { MP_ROM_QSTR(MP_QSTR_SMPS_MODE), MP_ROM_PTR(&pin_CYW1) },
++
++    { MP_ROM_QSTR(MP_QSTR_LED), MP_ROM_PTR(&pin_CYW0) },
++
++    { MP_ROM_QSTR(MP_QSTR_VBUS_SENSE), MP_ROM_PTR(&pin_CYW2) },
++
++    { MP_ROM_QSTR(MP_QSTR_GP26_A0), MP_ROM_PTR(&pin_GPIO26) },
++    { MP_ROM_QSTR(MP_QSTR_A0), MP_ROM_PTR(&pin_GPIO26) },
++
++    { MP_ROM_QSTR(MP_QSTR_GP27_A1), MP_ROM_PTR(&pin_GPIO27) },
++    { MP_ROM_QSTR(MP_QSTR_A1), MP_ROM_PTR(&pin_GPIO27) },
++
++    { MP_ROM_QSTR(MP_QSTR_GP28_A2), MP_ROM_PTR(&pin_GPIO28) },
++    { MP_ROM_QSTR(MP_QSTR_A2), MP_ROM_PTR(&pin_GPIO28) },
++
++    { MP_ROM_QSTR(MP_QSTR_VOLTAGE_MONITOR), MP_ROM_PTR(&pin_GPIO29) },
++    { MP_ROM_QSTR(MP_QSTR_A3), MP_ROM_PTR(&pin_GPIO29) },
++
++    { MP_ROM_QSTR(MP_QSTR_I2C), MP_ROM_PTR(&board_i2c_obj) },
++    { MP_ROM_QSTR(MP_QSTR_UART), MP_ROM_PTR(&board_uart_obj) },
++};
++MP_DEFINE_CONST_DICT(board_module_globals, board_module_globals_table);
+diff --git a/ports/raspberrypi/boards/picow_zero_base_rev1/board.c b/ports/raspberrypi/boards/picow_zero_base_rev1/board.c
+new file mode 100644
+index 0000000000..331653173e
+--- /dev/null
++++ b/ports/raspberrypi/boards/picow_zero_base_rev1/board.c
+@@ -0,0 +1,29 @@
++/*
++ * This file is part of the MicroPython project, http://micropython.org/
++ *
++ * The MIT License (MIT)
++ *
++ * Copyright (c) 2021 Scott Shawcroft for Adafruit Industries
++ *
++ * Permission is hereby granted, free of charge, to any person obtaining a copy
++ * of this software and associated documentation files (the "Software"), to deal
++ * in the Software without restriction, including without limitation the rights
++ * to use, copy, modify, merge, publish, distribute, sublicense, and/or sell
++ * copies of the Software, and to permit persons to whom the Software is
++ * furnished to do so, subject to the following conditions:
++ *
++ * The above copyright notice and this permission notice shall be included in
++ * all copies or substantial portions of the Software.
++ *
++ * THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND, EXPRESS OR
++ * IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF MERCHANTABILITY,
++ * FITNESS FOR A PARTICULAR PURPOSE AND NONINFRINGEMENT. IN NO EVENT SHALL THE
++ * AUTHORS OR COPYRIGHT HOLDERS BE LIABLE FOR ANY CLAIM, DAMAGES OR OTHER
++ * LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM,
++ * OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN
++ * THE SOFTWARE.
++ */
++
++#include "supervisor/board.h"
++
++// Use the MP_WEAK supervisor/shared/board.c versions of routines not defined here.
+diff --git a/ports/raspberrypi/boards/picow_zero_base_rev1/link.ld b/ports/raspberrypi/boards/picow_zero_base_rev1/link.ld
+new file mode 100644
+index 0000000000..e814bead4c
+--- /dev/null
++++ b/ports/raspberrypi/boards/picow_zero_base_rev1/link.ld
+@@ -0,0 +1 @@
++firmware_size = 1532k;
+diff --git a/ports/raspberrypi/boards/picow_zero_base_rev1/mpconfigboard.h b/ports/raspberrypi/boards/picow_zero_base_rev1/mpconfigboard.h
+new file mode 100644
+index 0000000000..55f0751dff
+--- /dev/null
++++ b/ports/raspberrypi/boards/picow_zero_base_rev1/mpconfigboard.h
+@@ -0,0 +1,18 @@
++#define MICROPY_HW_BOARD_NAME "PicoW Zero Base Rev1"
++#define MICROPY_HW_MCU_NAME "rp2040"
++
++#define CIRCUITPY_DIGITALIO_HAVE_INVALID_PULL (1)
++#define CIRCUITPY_DIGITALIO_HAVE_INVALID_DRIVE_MODE (1)
++
++#define MICROPY_HW_LED_STATUS   (&pin_CYW0)
++
++#define CIRCUITPY_BOARD_I2C         (1)
++#define CIRCUITPY_BOARD_I2C_PIN     {{.scl = &pin_GPIO3, .sda = &pin_GPIO2}}
++
++#define DEFAULT_SPI_BUS_SCK         (&pin_GPIO10)
++#define DEFAULT_SPI_BUS_MISO        (&pin_GPIO12)
++#define DEFAULT_SPI_BUS_MOSI        (&pin_GPIO11)
++
++
++#define CIRCUITPY_BOARD_UART        (1)
++#define CIRCUITPY_BOARD_UART_PIN    {{.tx = &pin_GPIO0, .rx = &pin_GPIO1}}
+diff --git a/ports/raspberrypi/boards/picow_zero_base_rev1/mpconfigboard.mk b/ports/raspberrypi/boards/picow_zero_base_rev1/mpconfigboard.mk
+new file mode 100644
+index 0000000000..52261f7230
+--- /dev/null
++++ b/ports/raspberrypi/boards/picow_zero_base_rev1/mpconfigboard.mk
+@@ -0,0 +1,34 @@
++USB_VID = 0x239A
++USB_PID = 0x8120
++USB_PRODUCT = "Pico W"
++USB_MANUFACTURER = "Raspberry Pi"
++
++CHIP_VARIANT = RP2040
++CHIP_FAMILY = rp2
++
++EXTERNAL_FLASH_DEVICES = "W25Q16JVxQ"
++
++CIRCUITPY__EVE = 1
++
++CIRCUITPY_CYW43 = 1
++CIRCUITPY_SSL = 1
++CIRCUITPY_SSL_MBEDTLS = 1
++CIRCUITPY_HASHLIB = 1
++CIRCUITPY_WEB_WORKFLOW = 1
++CIRCUITPY_MDNS = 1
++CIRCUITPY_SOCKETPOOL = 1
++CIRCUITPY_WIFI = 1
++
++# slim build
++CIRCUITPY_PICODVI = 0
++CIRCUITPY_USB_HOST = 0
++CIRCUITPY_USB_VIDEO = 0
++CIRCUITPY_WEB_WORKFLOW = 0
++CIRCUITPY_MDNS = 0
++CIRCUITPY_BLEIO_HCI = 0
++CIRCUITPY_BLEIO = 0
++CIRCUITPY_STATUS_BAR = 0
++
++CFLAGS += -DCYW43_PIN_WL_HOST_WAKE=24 -DCYW43_PIN_WL_REG_ON=23 -DCYW43_WL_GPIO_COUNT=3 -DCYW43_WL_GPIO_LED_PIN=0
++# Must be accompanied by a linker script change
++CFLAGS += -DCIRCUITPY_FIRMWARE_SIZE='(1536 * 1024)'
+diff --git a/ports/raspberrypi/boards/picow_zero_base_rev1/pico-sdk-configboard.h b/ports/raspberrypi/boards/picow_zero_base_rev1/pico-sdk-configboard.h
+new file mode 100644
+index 0000000000..36da55d457
+--- /dev/null
++++ b/ports/raspberrypi/boards/picow_zero_base_rev1/pico-sdk-configboard.h
+@@ -0,0 +1 @@
++// Put board-specific pico-sdk definitions here. This file must exist.
+diff --git a/ports/raspberrypi/boards/picow_zero_base_rev1/pins.c b/ports/raspberrypi/boards/picow_zero_base_rev1/pins.c
+new file mode 100644
+index 0000000000..6a9483ea34
+--- /dev/null
++++ b/ports/raspberrypi/boards/picow_zero_base_rev1/pins.c
+@@ -0,0 +1,118 @@
++#include "shared-bindings/board/__init__.h"
++
++STATIC const mp_rom_map_elem_t board_module_globals_table[] = {
++    CIRCUITPYTHON_BOARD_DICT_STANDARD_ITEMS
++
++    { MP_ROM_QSTR(MP_QSTR_GP0), MP_ROM_PTR(&pin_GPIO0) },
++    { MP_ROM_QSTR(MP_QSTR_GP1), MP_ROM_PTR(&pin_GPIO1) },
++    { MP_ROM_QSTR(MP_QSTR_GP2), MP_ROM_PTR(&pin_GPIO2) },
++    { MP_ROM_QSTR(MP_QSTR_GP3), MP_ROM_PTR(&pin_GPIO3) },
++    { MP_ROM_QSTR(MP_QSTR_GP4), MP_ROM_PTR(&pin_GPIO4) },
++    { MP_ROM_QSTR(MP_QSTR_GP5), MP_ROM_PTR(&pin_GPIO5) },
++    { MP_ROM_QSTR(MP_QSTR_GP6), MP_ROM_PTR(&pin_GPIO6) },
++    { MP_ROM_QSTR(MP_QSTR_GP7), MP_ROM_PTR(&pin_GPIO7) },
++    { MP_ROM_QSTR(MP_QSTR_GP8), MP_ROM_PTR(&pin_GPIO8) },
++    { MP_ROM_QSTR(MP_QSTR_GP9), MP_ROM_PTR(&pin_GPIO9) },
++    { MP_ROM_QSTR(MP_QSTR_GP10), MP_ROM_PTR(&pin_GPIO10) },
++    { MP_ROM_QSTR(MP_QSTR_GP11), MP_ROM_PTR(&pin_GPIO11) },
++    { MP_ROM_QSTR(MP_QSTR_GP12), MP_ROM_PTR(&pin_GPIO12) },
++    { MP_ROM_QSTR(MP_QSTR_GP13), MP_ROM_PTR(&pin_GPIO13) },
++    { MP_ROM_QSTR(MP_QSTR_GP14), MP_ROM_PTR(&pin_GPIO14) },
++    { MP_ROM_QSTR(MP_QSTR_GP15), MP_ROM_PTR(&pin_GPIO15) },
++    { MP_ROM_QSTR(MP_QSTR_GP16), MP_ROM_PTR(&pin_GPIO16) },
++    { MP_ROM_QSTR(MP_QSTR_GP17), MP_ROM_PTR(&pin_GPIO17) },
++    { MP_ROM_QSTR(MP_QSTR_GP18), MP_ROM_PTR(&pin_GPIO18) },
++    { MP_ROM_QSTR(MP_QSTR_GP19), MP_ROM_PTR(&pin_GPIO19) },
++    { MP_ROM_QSTR(MP_QSTR_GP20), MP_ROM_PTR(&pin_GPIO20) },
++    { MP_ROM_QSTR(MP_QSTR_GP21), MP_ROM_PTR(&pin_GPIO21) },
++    { MP_ROM_QSTR(MP_QSTR_GP22), MP_ROM_PTR(&pin_GPIO22) },
++    { MP_ROM_QSTR(MP_QSTR_GP26), MP_ROM_PTR(&pin_GPIO26) },
++    { MP_ROM_QSTR(MP_QSTR_GP27), MP_ROM_PTR(&pin_GPIO27) },
++    { MP_ROM_QSTR(MP_QSTR_GP28), MP_ROM_PTR(&pin_GPIO28) },
++
++    { MP_ROM_QSTR(MP_QSTR_GPIO14), MP_ROM_PTR(&pin_GPIO0) },
++    { MP_ROM_QSTR(MP_QSTR_TX), MP_ROM_PTR(&pin_GPIO0) },
++
++    { MP_ROM_QSTR(MP_QSTR_GPIO15), MP_ROM_PTR(&pin_GPIO1) },
++    { MP_ROM_QSTR(MP_QSTR_RX), MP_ROM_PTR(&pin_GPIO1) },
++
++    { MP_ROM_QSTR(MP_QSTR_GPIO2), MP_ROM_PTR(&pin_GPIO2) },
++    { MP_ROM_QSTR(MP_QSTR_SDA), MP_ROM_PTR(&pin_GPIO2) },
++
++    { MP_ROM_QSTR(MP_QSTR_GPIO3), MP_ROM_PTR(&pin_GPIO3) },
++    { MP_ROM_QSTR(MP_QSTR_SCL), MP_ROM_PTR(&pin_GPIO3) },
++
++    { MP_ROM_QSTR(MP_QSTR_GPIO4), MP_ROM_PTR(&pin_GPIO4) },
++
++    { MP_ROM_QSTR(MP_QSTR_GPIO17), MP_ROM_PTR(&pin_GPIO5) },
++
++    { MP_ROM_QSTR(MP_QSTR_GPIO27), MP_ROM_PTR(&pin_GPIO6) },
++
++    { MP_ROM_QSTR(MP_QSTR_GPIO22), MP_ROM_PTR(&pin_GPIO7) },
++
++    { MP_ROM_QSTR(MP_QSTR_GPIO23), MP_ROM_PTR(&pin_GPIO8) },
++
++    { MP_ROM_QSTR(MP_QSTR_GPIO8), MP_ROM_PTR(&pin_GPIO9) },
++    { MP_ROM_QSTR(MP_QSTR_CE0), MP_ROM_PTR(&pin_GPIO9) },
++
++    { MP_ROM_QSTR(MP_QSTR_GPIO11), MP_ROM_PTR(&pin_GPIO10) },
++    { MP_ROM_QSTR(MP_QSTR_SCLK), MP_ROM_PTR(&pin_GPIO10) },
++
++    { MP_ROM_QSTR(MP_QSTR_GPIO10), MP_ROM_PTR(&pin_GPIO11) },
++    { MP_ROM_QSTR(MP_QSTR_MOSI), MP_ROM_PTR(&pin_GPIO11) },
++
++    { MP_ROM_QSTR(MP_QSTR_GPIO9), MP_ROM_PTR(&pin_GPIO12) },
++    { MP_ROM_QSTR(MP_QSTR_MISO), MP_ROM_PTR(&pin_GPIO12) },
++
++    { MP_ROM_QSTR(MP_QSTR_GPIO6), MP_ROM_PTR(&pin_GPIO13) },
++
++    { MP_ROM_QSTR(MP_QSTR_GPIO13), MP_ROM_PTR(&pin_GPIO14) },
++
++    { MP_ROM_QSTR(MP_QSTR_GPIO26), MP_ROM_PTR(&pin_GPIO15) },
++
++    { MP_ROM_QSTR(MP_QSTR_GPIO19), MP_ROM_PTR(&pin_GPIO16) },
++    { MP_ROM_QSTR(MP_QSTR_MISO1), MP_ROM_PTR(&pin_GPIO16) },
++
++    { MP_ROM_QSTR(MP_QSTR_GPIO16), MP_ROM_PTR(&pin_GPIO17) },
++
++    { MP_ROM_QSTR(MP_QSTR_GPIO21), MP_ROM_PTR(&pin_GPIO18) },
++    { MP_ROM_QSTR(MP_QSTR_SCLK1), MP_ROM_PTR(&pin_GPIO18) },
++
++    { MP_ROM_QSTR(MP_QSTR_GPIO20), MP_ROM_PTR(&pin_GPIO19) },
++    { MP_ROM_QSTR(MP_QSTR_MOSI1), MP_ROM_PTR(&pin_GPIO19) },
++
++    { MP_ROM_QSTR(MP_QSTR_GPIO12), MP_ROM_PTR(&pin_GPIO20) },
++
++    { MP_ROM_QSTR(MP_QSTR_GPIO5), MP_ROM_PTR(&pin_GPIO21) },
++
++    { MP_ROM_QSTR(MP_QSTR_GPIO7), MP_ROM_PTR(&pin_GPIO22) },
++    { MP_ROM_QSTR(MP_QSTR_CE1), MP_ROM_PTR(&pin_GPIO22) },
++
++    { MP_ROM_QSTR(MP_QSTR_GPIO25), MP_ROM_PTR(&pin_GPIO26) },
++
++    { MP_ROM_QSTR(MP_QSTR_GPIO24), MP_ROM_PTR(&pin_GPIO27) },
++
++    { MP_ROM_QSTR(MP_QSTR_GPIO18), MP_ROM_PTR(&pin_GPIO28) },
++
++    { MP_ROM_QSTR(MP_QSTR_SMPS_MODE), MP_ROM_PTR(&pin_CYW1) },
++
++    { MP_ROM_QSTR(MP_QSTR_LED), MP_ROM_PTR(&pin_CYW0) },
++
++    { MP_ROM_QSTR(MP_QSTR_VBUS_SENSE), MP_ROM_PTR(&pin_CYW2) },
++
++    { MP_ROM_QSTR(MP_QSTR_GP26_A0), MP_ROM_PTR(&pin_GPIO26) },
++    { MP_ROM_QSTR(MP_QSTR_A0), MP_ROM_PTR(&pin_GPIO26) },
++
++    { MP_ROM_QSTR(MP_QSTR_GP27_A1), MP_ROM_PTR(&pin_GPIO27) },
++    { MP_ROM_QSTR(MP_QSTR_A1), MP_ROM_PTR(&pin_GPIO27) },
++
++    { MP_ROM_QSTR(MP_QSTR_GP28_A2), MP_ROM_PTR(&pin_GPIO28) },
++    { MP_ROM_QSTR(MP_QSTR_A2), MP_ROM_PTR(&pin_GPIO28) },
++
++    { MP_ROM_QSTR(MP_QSTR_VOLTAGE_MONITOR), MP_ROM_PTR(&pin_GPIO29) },
++    { MP_ROM_QSTR(MP_QSTR_A3), MP_ROM_PTR(&pin_GPIO29) },
++
++    { MP_ROM_QSTR(MP_QSTR_I2C), MP_ROM_PTR(&board_i2c_obj) },
++    { MP_ROM_QSTR(MP_QSTR_UART), MP_ROM_PTR(&board_uart_obj) },
++};
++MP_DEFINE_CONST_DICT(board_module_globals, board_module_globals_table);
+diff --git a/ports/raspberrypi/boards/picow_zero_base_rev2/board.c b/ports/raspberrypi/boards/picow_zero_base_rev2/board.c
+new file mode 100644
+index 0000000000..331653173e
+--- /dev/null
++++ b/ports/raspberrypi/boards/picow_zero_base_rev2/board.c
+@@ -0,0 +1,29 @@
++/*
++ * This file is part of the MicroPython project, http://micropython.org/
++ *
++ * The MIT License (MIT)
++ *
++ * Copyright (c) 2021 Scott Shawcroft for Adafruit Industries
++ *
++ * Permission is hereby granted, free of charge, to any person obtaining a copy
++ * of this software and associated documentation files (the "Software"), to deal
++ * in the Software without restriction, including without limitation the rights
++ * to use, copy, modify, merge, publish, distribute, sublicense, and/or sell
++ * copies of the Software, and to permit persons to whom the Software is
++ * furnished to do so, subject to the following conditions:
++ *
++ * The above copyright notice and this permission notice shall be included in
++ * all copies or substantial portions of the Software.
++ *
++ * THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND, EXPRESS OR
++ * IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF MERCHANTABILITY,
++ * FITNESS FOR A PARTICULAR PURPOSE AND NONINFRINGEMENT. IN NO EVENT SHALL THE
++ * AUTHORS OR COPYRIGHT HOLDERS BE LIABLE FOR ANY CLAIM, DAMAGES OR OTHER
++ * LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM,
++ * OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN
++ * THE SOFTWARE.
++ */
++
++#include "supervisor/board.h"
++
++// Use the MP_WEAK supervisor/shared/board.c versions of routines not defined here.
+diff --git a/ports/raspberrypi/boards/picow_zero_base_rev2/link.ld b/ports/raspberrypi/boards/picow_zero_base_rev2/link.ld
+new file mode 100644
+index 0000000000..e814bead4c
+--- /dev/null
++++ b/ports/raspberrypi/boards/picow_zero_base_rev2/link.ld
+@@ -0,0 +1 @@
++firmware_size = 1532k;
+diff --git a/ports/raspberrypi/boards/picow_zero_base_rev2/mpconfigboard.h b/ports/raspberrypi/boards/picow_zero_base_rev2/mpconfigboard.h
+new file mode 100644
+index 0000000000..de98ccadba
+--- /dev/null
++++ b/ports/raspberrypi/boards/picow_zero_base_rev2/mpconfigboard.h
+@@ -0,0 +1,18 @@
++#define MICROPY_HW_BOARD_NAME "PicoW Zero Base Rev2"
++#define MICROPY_HW_MCU_NAME "rp2040"
++
++#define CIRCUITPY_DIGITALIO_HAVE_INVALID_PULL (1)
++#define CIRCUITPY_DIGITALIO_HAVE_INVALID_DRIVE_MODE (1)
++
++#define MICROPY_HW_LED_STATUS   (&pin_CYW0)
++
++#define CIRCUITPY_BOARD_I2C         (1)
++#define CIRCUITPY_BOARD_I2C_PIN     {{.scl = &pin_GPIO3, .sda = &pin_GPIO2}}
++
++#define DEFAULT_SPI_BUS_SCK         (&pin_GPIO10)
++#define DEFAULT_SPI_BUS_MISO        (&pin_GPIO12)
++#define DEFAULT_SPI_BUS_MOSI        (&pin_GPIO11)
++
++
++#define CIRCUITPY_BOARD_UART        (1)
++#define CIRCUITPY_BOARD_UART_PIN    {{.tx = &pin_GPIO0, .rx = &pin_GPIO1}}
+diff --git a/ports/raspberrypi/boards/picow_zero_base_rev2/mpconfigboard.mk b/ports/raspberrypi/boards/picow_zero_base_rev2/mpconfigboard.mk
+new file mode 100644
+index 0000000000..52261f7230
+--- /dev/null
++++ b/ports/raspberrypi/boards/picow_zero_base_rev2/mpconfigboard.mk
+@@ -0,0 +1,34 @@
++USB_VID = 0x239A
++USB_PID = 0x8120
++USB_PRODUCT = "Pico W"
++USB_MANUFACTURER = "Raspberry Pi"
++
++CHIP_VARIANT = RP2040
++CHIP_FAMILY = rp2
++
++EXTERNAL_FLASH_DEVICES = "W25Q16JVxQ"
++
++CIRCUITPY__EVE = 1
++
++CIRCUITPY_CYW43 = 1
++CIRCUITPY_SSL = 1
++CIRCUITPY_SSL_MBEDTLS = 1
++CIRCUITPY_HASHLIB = 1
++CIRCUITPY_WEB_WORKFLOW = 1
++CIRCUITPY_MDNS = 1
++CIRCUITPY_SOCKETPOOL = 1
++CIRCUITPY_WIFI = 1
++
++# slim build
++CIRCUITPY_PICODVI = 0
++CIRCUITPY_USB_HOST = 0
++CIRCUITPY_USB_VIDEO = 0
++CIRCUITPY_WEB_WORKFLOW = 0
++CIRCUITPY_MDNS = 0
++CIRCUITPY_BLEIO_HCI = 0
++CIRCUITPY_BLEIO = 0
++CIRCUITPY_STATUS_BAR = 0
++
++CFLAGS += -DCYW43_PIN_WL_HOST_WAKE=24 -DCYW43_PIN_WL_REG_ON=23 -DCYW43_WL_GPIO_COUNT=3 -DCYW43_WL_GPIO_LED_PIN=0
++# Must be accompanied by a linker script change
++CFLAGS += -DCIRCUITPY_FIRMWARE_SIZE='(1536 * 1024)'
+diff --git a/ports/raspberrypi/boards/picow_zero_base_rev2/pico-sdk-configboard.h b/ports/raspberrypi/boards/picow_zero_base_rev2/pico-sdk-configboard.h
+new file mode 100644
+index 0000000000..36da55d457
+--- /dev/null
++++ b/ports/raspberrypi/boards/picow_zero_base_rev2/pico-sdk-configboard.h
+@@ -0,0 +1 @@
++// Put board-specific pico-sdk definitions here. This file must exist.
+diff --git a/ports/raspberrypi/boards/picow_zero_base_rev2/pins.c b/ports/raspberrypi/boards/picow_zero_base_rev2/pins.c
+new file mode 100644
+index 0000000000..787a37885c
+--- /dev/null
++++ b/ports/raspberrypi/boards/picow_zero_base_rev2/pins.c
+@@ -0,0 +1,115 @@
++#include "shared-bindings/board/__init__.h"
++
++STATIC const mp_rom_map_elem_t board_module_globals_table[] = {
++    CIRCUITPYTHON_BOARD_DICT_STANDARD_ITEMS
++
++    { MP_ROM_QSTR(MP_QSTR_GP0), MP_ROM_PTR(&pin_GPIO0) },
++    { MP_ROM_QSTR(MP_QSTR_GP1), MP_ROM_PTR(&pin_GPIO1) },
++    { MP_ROM_QSTR(MP_QSTR_GP2), MP_ROM_PTR(&pin_GPIO2) },
++    { MP_ROM_QSTR(MP_QSTR_GP3), MP_ROM_PTR(&pin_GPIO3) },
++    { MP_ROM_QSTR(MP_QSTR_GP4), MP_ROM_PTR(&pin_GPIO4) },
++    { MP_ROM_QSTR(MP_QSTR_GP5), MP_ROM_PTR(&pin_GPIO5) },
++    { MP_ROM_QSTR(MP_QSTR_GP6), MP_ROM_PTR(&pin_GPIO6) },
++    { MP_ROM_QSTR(MP_QSTR_GP7), MP_ROM_PTR(&pin_GPIO7) },
++    { MP_ROM_QSTR(MP_QSTR_GP8), MP_ROM_PTR(&pin_GPIO8) },
++    { MP_ROM_QSTR(MP_QSTR_GP9), MP_ROM_PTR(&pin_GPIO9) },
++    { MP_ROM_QSTR(MP_QSTR_GP10), MP_ROM_PTR(&pin_GPIO10) },
++    { MP_ROM_QSTR(MP_QSTR_GP11), MP_ROM_PTR(&pin_GPIO11) },
++    { MP_ROM_QSTR(MP_QSTR_GP12), MP_ROM_PTR(&pin_GPIO12) },
++    { MP_ROM_QSTR(MP_QSTR_GP13), MP_ROM_PTR(&pin_GPIO13) },
++    { MP_ROM_QSTR(MP_QSTR_GP14), MP_ROM_PTR(&pin_GPIO14) },
++    { MP_ROM_QSTR(MP_QSTR_GP15), MP_ROM_PTR(&pin_GPIO15) },
++    { MP_ROM_QSTR(MP_QSTR_GP16), MP_ROM_PTR(&pin_GPIO16) },
++    { MP_ROM_QSTR(MP_QSTR_GP17), MP_ROM_PTR(&pin_GPIO17) },
++    { MP_ROM_QSTR(MP_QSTR_GP18), MP_ROM_PTR(&pin_GPIO18) },
++    { MP_ROM_QSTR(MP_QSTR_GP19), MP_ROM_PTR(&pin_GPIO19) },
++    { MP_ROM_QSTR(MP_QSTR_GP20), MP_ROM_PTR(&pin_GPIO20) },
++    { MP_ROM_QSTR(MP_QSTR_GP21), MP_ROM_PTR(&pin_GPIO21) },
++    { MP_ROM_QSTR(MP_QSTR_GP22), MP_ROM_PTR(&pin_GPIO22) },
++    { MP_ROM_QSTR(MP_QSTR_GP26), MP_ROM_PTR(&pin_GPIO26) },
++    { MP_ROM_QSTR(MP_QSTR_GP27), MP_ROM_PTR(&pin_GPIO27) },
++    { MP_ROM_QSTR(MP_QSTR_GP28), MP_ROM_PTR(&pin_GPIO28) },
++
++    { MP_ROM_QSTR(MP_QSTR_GPIO14), MP_ROM_PTR(&pin_GPIO0) },
++    { MP_ROM_QSTR(MP_QSTR_TX), MP_ROM_PTR(&pin_GPIO0) },
++
++    { MP_ROM_QSTR(MP_QSTR_GPIO15), MP_ROM_PTR(&pin_GPIO1) },
++    { MP_ROM_QSTR(MP_QSTR_RX), MP_ROM_PTR(&pin_GPIO1) },
++
++    { MP_ROM_QSTR(MP_QSTR_GPIO2), MP_ROM_PTR(&pin_GPIO2) },
++    { MP_ROM_QSTR(MP_QSTR_SDA), MP_ROM_PTR(&pin_GPIO2) },
++
++    { MP_ROM_QSTR(MP_QSTR_GPIO3), MP_ROM_PTR(&pin_GPIO3) },
++    { MP_ROM_QSTR(MP_QSTR_SCL), MP_ROM_PTR(&pin_GPIO3) },
++
++    { MP_ROM_QSTR(MP_QSTR_GPIO4), MP_ROM_PTR(&pin_GPIO4) },
++
++    { MP_ROM_QSTR(MP_QSTR_GPIO17), MP_ROM_PTR(&pin_GPIO5) },
++
++    { MP_ROM_QSTR(MP_QSTR_GPIO27), MP_ROM_PTR(&pin_GPIO6) },
++
++    { MP_ROM_QSTR(MP_QSTR_GPIO22), MP_ROM_PTR(&pin_GPIO7) },
++
++    { MP_ROM_QSTR(MP_QSTR_GPIO23), MP_ROM_PTR(&pin_GPIO8) },
++
++    { MP_ROM_QSTR(MP_QSTR_GPIO8), MP_ROM_PTR(&pin_GPIO9) },
++    { MP_ROM_QSTR(MP_QSTR_CE0), MP_ROM_PTR(&pin_GPIO9) },
++
++    { MP_ROM_QSTR(MP_QSTR_GPIO11), MP_ROM_PTR(&pin_GPIO10) },
++    { MP_ROM_QSTR(MP_QSTR_SCLK), MP_ROM_PTR(&pin_GPIO10) },
++
++    { MP_ROM_QSTR(MP_QSTR_GPIO10), MP_ROM_PTR(&pin_GPIO11) },
++    { MP_ROM_QSTR(MP_QSTR_MOSI), MP_ROM_PTR(&pin_GPIO11) },
++
++    { MP_ROM_QSTR(MP_QSTR_GPIO9), MP_ROM_PTR(&pin_GPIO12) },
++    { MP_ROM_QSTR(MP_QSTR_MISO), MP_ROM_PTR(&pin_GPIO12) },
++
++    { MP_ROM_QSTR(MP_QSTR_GPIO6), MP_ROM_PTR(&pin_GPIO13) },
++
++    { MP_ROM_QSTR(MP_QSTR_GPIO13), MP_ROM_PTR(&pin_GPIO14) },
++
++    { MP_ROM_QSTR(MP_QSTR_GPIO26), MP_ROM_PTR(&pin_GPIO15) },
++
++    { MP_ROM_QSTR(MP_QSTR_GPIO21), MP_ROM_PTR(&pin_GPIO16) },
++
++    { MP_ROM_QSTR(MP_QSTR_GPIO20), MP_ROM_PTR(&pin_GPIO17) },
++
++    { MP_ROM_QSTR(MP_QSTR_GPIO18), MP_ROM_PTR(&pin_GPIO18) },
++
++    { MP_ROM_QSTR(MP_QSTR_GPIO19), MP_ROM_PTR(&pin_GPIO19) },
++
++    { MP_ROM_QSTR(MP_QSTR_GPIO16), MP_ROM_PTR(&pin_GPIO20) },
++
++    { MP_ROM_QSTR(MP_QSTR_GPIO12), MP_ROM_PTR(&pin_GPIO21) },
++
++    { MP_ROM_QSTR(MP_QSTR_GPIO5), MP_ROM_PTR(&pin_GPIO22) },
++
++    { MP_ROM_QSTR(MP_QSTR_GPIO7),  MP_ROM_PTR(&pin_GPIO26) },
++    { MP_ROM_QSTR(MP_QSTR_CE1),    MP_ROM_PTR(&pin_GPIO26) },
++
++    { MP_ROM_QSTR(MP_QSTR_GPIO25), MP_ROM_PTR(&pin_GPIO27) },
++
++    { MP_ROM_QSTR(MP_QSTR_GPIO24), MP_ROM_PTR(&pin_GPIO28) },
++
++    { MP_ROM_QSTR(MP_QSTR_SMPS_MODE), MP_ROM_PTR(&pin_CYW1) },
++
++    { MP_ROM_QSTR(MP_QSTR_LED), MP_ROM_PTR(&pin_CYW0) },
++
++    { MP_ROM_QSTR(MP_QSTR_VBUS_SENSE), MP_ROM_PTR(&pin_CYW2) },
++
++    { MP_ROM_QSTR(MP_QSTR_GP26_A0), MP_ROM_PTR(&pin_GPIO26) },
++    { MP_ROM_QSTR(MP_QSTR_A0), MP_ROM_PTR(&pin_GPIO26) },
++
++    { MP_ROM_QSTR(MP_QSTR_GP27_A1), MP_ROM_PTR(&pin_GPIO27) },
++    { MP_ROM_QSTR(MP_QSTR_A1), MP_ROM_PTR(&pin_GPIO27) },
++
++    { MP_ROM_QSTR(MP_QSTR_GP28_A2), MP_ROM_PTR(&pin_GPIO28) },
++    { MP_ROM_QSTR(MP_QSTR_A2), MP_ROM_PTR(&pin_GPIO28) },
++
++    { MP_ROM_QSTR(MP_QSTR_VOLTAGE_MONITOR), MP_ROM_PTR(&pin_GPIO29) },
++    { MP_ROM_QSTR(MP_QSTR_A3), MP_ROM_PTR(&pin_GPIO29) },
++
++    { MP_ROM_QSTR(MP_QSTR_I2C), MP_ROM_PTR(&board_i2c_obj) },
++    { MP_ROM_QSTR(MP_QSTR_UART), MP_ROM_PTR(&board_uart_obj) },
++};
++MP_DEFINE_CONST_DICT(board_module_globals, board_module_globals_table);
+diff --git a/ports/raspberrypi/boards/pimoroni_tufty2040/board.c b/ports/raspberrypi/boards/pimoroni_tufty2040/board.c
+new file mode 100644
+index 0000000000..35149446e6
+--- /dev/null
++++ b/ports/raspberrypi/boards/pimoroni_tufty2040/board.c
+@@ -0,0 +1,153 @@
++/*
++ * This file is part of the MicroPython project, http://micropython.org/
++ *
++ * The MIT License (MIT)
++ *
++ * Copyright (c) 2021 Scott Shawcroft for Adafruit Industries
++ *
++ * Permission is hereby granted, free of charge, to any person obtaining a copy
++ * of this software and associated documentation files (the "Software"), to deal
++ * in the Software without restriction, including without limitation the rights
++ * to use, copy, modify, merge, publish, distribute, sublicense, and/or sell
++ * copies of the Software, and to permit persons to whom the Software is
++ * furnished to do so, subject to the following conditions:
++ *
++ * The above copyright notice and this permission notice shall be included in
++ * all copies or substantial portions of the Software.
++ *
++ * THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND, EXPRESS OR
++ * IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF MERCHANTABILITY,
++ * FITNESS FOR A PARTICULAR PURPOSE AND NONINFRINGEMENT. IN NO EVENT SHALL THE
++ * AUTHORS OR COPYRIGHT HOLDERS BE LIABLE FOR ANY CLAIM, DAMAGES OR OTHER
++ * LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM,
++ * OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN
++ * THE SOFTWARE.
++ */
++
++#include "supervisor/board.h"
++
++#include "mpconfigboard.h"
++#include "common-hal/paralleldisplay/ParallelBus.h"
++#include "shared-module/displayio/__init__.h"
++#include "supervisor/shared/board.h"
++
++#define DELAY 0x80
++
++enum reg {
++    SWRESET   = 0x01,
++    TEOFF     = 0x34,
++    TEON      = 0x35,
++    MADCTL    = 0x36,
++    COLMOD    = 0x3A,
++    GCTRL     = 0xB7,
++    VCOMS     = 0xBB,
++    LCMCTRL   = 0xC0,
++    VDVVRHEN  = 0xC2,
++    VRHS      = 0xC3,
++    VDVS      = 0xC4,
++    FRCTRL2   = 0xC6,
++    PWCTRL1   = 0xD0,
++    PORCTRL   = 0xB2,
++    GMCTRP1   = 0xE0,
++    GMCTRN1   = 0xE1,
++    INVOFF    = 0x20,
++    SLPOUT    = 0x11,
++    DISPON    = 0x29,
++    GAMSET    = 0x26,
++    DISPOFF   = 0x28,
++    RAMWR     = 0x2C,
++    INVON     = 0x21,
++    CASET     = 0x2A,
++    RASET     = 0x2B,
++    PWMFRSEL  = 0xCC
++};
++
++enum MADCTL {
++    ROW_ORDER   = 0b10000000,
++    COL_ORDER   = 0b01000000,
++    SWAP_XY     = 0b00100000,  // AKA "MV"
++    SCAN_ORDER  = 0b00010000,
++    RGB_BGR     = 0b00001000,
++    HORIZ_ORDER = 0b00000100
++};
++
++uint8_t display_init_sequence[] = {
++    SWRESET, DELAY, 0x64, // 100ms delay
++    TEON, DELAY, 0x64,
++    COLMOD, 1, 0x05,
++    PORCTRL, 5, 0x0c, 0x0c, 0x00, 0x33, 0x33,
++    LCMCTRL, 1, 0x2c,
++    VDVVRHEN, 1, 0x01,
++    VRHS, 1, 0x12,
++    VDVS, 1, 0x20,
++    PWCTRL1, 2, 0xa4, 0xa1,
++    FRCTRL2, 1, 0x0f,
++    GCTRL, 1, 0x35,
++    VCOMS, 1, 0x1f,
++    0xd6, 1, 0xa1,
++    GMCTRP1, 14, 0xd0, 0x08, 0x11, 0x08, 0x0c, 0x15, 0x39, 0x33, 0x50, 0x36, 0x13, 0x14, 0x29, 0x2D,
++    GMCTRN1, 14, 0xd0, 0x08, 0x10, 0x08, 0x06, 0x06, 0x39, 0x44, 0x51, 0x0b, 0x16, 0x14, 0x2f, 0x31,
++    INVON, DELAY, 0x64,
++    SLPOUT, DELAY, 0x64,
++    DISPON, DELAY, 0x64,
++    CASET, 4, 0x00, 0x00, 0x01, 0x3F,
++    RASET, 4, 0x00, 0x00, 0x00, 0xEF,
++    MADCTL, 1, ROW_ORDER | SWAP_XY | SCAN_ORDER,
++};
++
++
++void board_init(void) {
++    paralleldisplay_parallelbus_obj_t *bus = &allocate_display_bus()->parallel_bus;
++    bus->base.type = &paralleldisplay_parallelbus_type;
++    common_hal_paralleldisplay_parallelbus_construct(bus,
++        &pin_GPIO14, // Data0
++        &pin_GPIO11, // Command or data
++        &pin_GPIO10, // Chip select
++        &pin_GPIO12, // Write
++        &pin_GPIO13, // Read
++        NULL, // Reset
++        2500000); // Frequency (not fast enough to hit 60Hz, but seems to avoid the ghosting issue)
++
++    displayio_display_obj_t *display = &allocate_display()->display;
++    display->base.type = &displayio_display_type;
++    common_hal_displayio_display_construct(display,
++        bus,
++        320, // Width
++        240, // Height
++        0, // column start
++        0, // row start
++        0, // rotation
++        16, // Color depth
++        false, // grayscale
++        false, // pixels_in_byte_share_row (unused for depths > 8)
++        1, // bytes per cell. Only valid for depths < 8
++        false, // reverse_pixels_in_byte. Only valid for depths < 8
++        true, // reverse_pixels_in_word
++        CASET, // Set column command
++        RASET, // Set row command
++        RAMWR, // Write memory command
++        display_init_sequence,
++        sizeof(display_init_sequence),
++        &pin_GPIO2, // Backlight pin
++        NO_BRIGHTNESS_COMMAND,
++        1.0f, // brightness (ignored)
++        false, // single_byte_bounds
++        false, // data_as_commands
++        true, // auto_refresh
++        60, // native_frames_per_second
++        true, // backlight_on_high
++        false, // SH1107_addressing
++        250); // backlight pwm frequency (highest that will result 0.01 displaying an image)
++    common_hal_never_reset_pin(&pin_GPIO2); // backlight pin
++}
++
++bool board_requests_safe_mode(void) {
++    return false;
++}
++
++void reset_board(void) {
++}
++
++void board_deinit(void) {
++    common_hal_displayio_release_displays();
++}
+diff --git a/ports/raspberrypi/boards/pimoroni_tufty2040/mpconfigboard.h b/ports/raspberrypi/boards/pimoroni_tufty2040/mpconfigboard.h
+new file mode 100644
+index 0000000000..83c08cb7fe
+--- /dev/null
++++ b/ports/raspberrypi/boards/pimoroni_tufty2040/mpconfigboard.h
+@@ -0,0 +1,11 @@
++#define MICROPY_HW_BOARD_NAME "Pimoroni Tufty 2040"
++#define MICROPY_HW_MCU_NAME "rp2040"
++
++// Status LED
++#define MICROPY_HW_LED_STATUS (&pin_GPIO25)
++
++#define DEFAULT_UART_BUS_TX (&pin_GPIO0)
++#define DEFAULT_UART_BUS_RX (&pin_GPIO1)
++
++#define DEFAULT_I2C_BUS_SDA (&pin_GPIO4)
++#define DEFAULT_I2C_BUS_SCL (&pin_GPIO5)
+diff --git a/ports/raspberrypi/boards/pimoroni_tufty2040/mpconfigboard.mk b/ports/raspberrypi/boards/pimoroni_tufty2040/mpconfigboard.mk
+new file mode 100644
+index 0000000000..698fa68100
+--- /dev/null
++++ b/ports/raspberrypi/boards/pimoroni_tufty2040/mpconfigboard.mk
+@@ -0,0 +1,21 @@
++USB_VID = 0x2E8A
++USB_PID = 0x101B
++USB_PRODUCT = "Tufty 2040"
++USB_MANUFACTURER = "Pimoroni"
++
++CHIP_VARIANT = RP2040
++CHIP_FAMILY = rp2
++
++EXTERNAL_FLASH_DEVICES = "W25Q64JVxQ"
++
++CIRCUITPY__EVE = 1
++
++# slim build
++CIRCUITPY_PICODVI = 0
++CIRCUITPY_USB_HOST = 0
++CIRCUITPY_USB_VIDEO = 0
++CIRCUITPY_WEB_WORKFLOW = 0
++CIRCUITPY_MDNS = 0
++CIRCUITPY_BLEIO_HCI = 0
++CIRCUITPY_BLEIO = 0
++CIRCUITPY_STATUS_BAR = 0
+diff --git a/ports/raspberrypi/boards/pimoroni_tufty2040/pico-sdk-configboard.h b/ports/raspberrypi/boards/pimoroni_tufty2040/pico-sdk-configboard.h
+new file mode 100644
+index 0000000000..36da55d457
+--- /dev/null
++++ b/ports/raspberrypi/boards/pimoroni_tufty2040/pico-sdk-configboard.h
+@@ -0,0 +1 @@
++// Put board-specific pico-sdk definitions here. This file must exist.
+diff --git a/ports/raspberrypi/boards/pimoroni_tufty2040/pins.c b/ports/raspberrypi/boards/pimoroni_tufty2040/pins.c
+new file mode 100644
+index 0000000000..e54eb0e3dc
+--- /dev/null
++++ b/ports/raspberrypi/boards/pimoroni_tufty2040/pins.c
+@@ -0,0 +1,53 @@
++#include "shared-bindings/board/__init__.h"
++
++#include "shared-module/displayio/__init__.h"
++
++STATIC const mp_rom_map_elem_t board_module_globals_table[] = {
++    CIRCUITPYTHON_BOARD_DICT_STANDARD_ITEMS
++
++    { MP_ROM_QSTR(MP_QSTR_TX), MP_ROM_PTR(&pin_GPIO0) },
++    { MP_ROM_QSTR(MP_QSTR_GP0), MP_ROM_PTR(&pin_GPIO0) },
++
++    { MP_ROM_QSTR(MP_QSTR_RX), MP_ROM_PTR(&pin_GPIO1) },
++    { MP_ROM_QSTR(MP_QSTR_GP1), MP_ROM_PTR(&pin_GPIO1) },
++
++    { MP_ROM_QSTR(MP_QSTR_LCD_BACKLIGHT), MP_ROM_PTR(&pin_GPIO2) },
++
++    { MP_ROM_QSTR(MP_QSTR_INT), MP_ROM_PTR(&pin_GPIO3) },
++    { MP_ROM_QSTR(MP_QSTR_SDA), MP_ROM_PTR(&pin_GPIO4) },
++    { MP_ROM_QSTR(MP_QSTR_SCL), MP_ROM_PTR(&pin_GPIO5) },
++
++    { MP_ROM_QSTR(MP_QSTR_SW_DOWN), MP_ROM_PTR(&pin_GPIO6) },
++    { MP_ROM_QSTR(MP_QSTR_SW_A), MP_ROM_PTR(&pin_GPIO7) },
++    { MP_ROM_QSTR(MP_QSTR_SW_B), MP_ROM_PTR(&pin_GPIO8) },
++    { MP_ROM_QSTR(MP_QSTR_SW_C), MP_ROM_PTR(&pin_GPIO9) },
++    { MP_ROM_QSTR(MP_QSTR_SW_UP), MP_ROM_PTR(&pin_GPIO22) },
++
++    { MP_ROM_QSTR(MP_QSTR_LCD_CS), MP_ROM_PTR(&pin_GPIO10) },
++    { MP_ROM_QSTR(MP_QSTR_LCD_RS), MP_ROM_PTR(&pin_GPIO11) },
++    { MP_ROM_QSTR(MP_QSTR_LCD_WR), MP_ROM_PTR(&pin_GPIO12) },
++    { MP_ROM_QSTR(MP_QSTR_LCD_RD), MP_ROM_PTR(&pin_GPIO13) },
++    { MP_ROM_QSTR(MP_QSTR_LCD_DB0), MP_ROM_PTR(&pin_GPIO14) },
++    { MP_ROM_QSTR(MP_QSTR_LCD_DB1), MP_ROM_PTR(&pin_GPIO15) },
++    { MP_ROM_QSTR(MP_QSTR_LCD_DB2), MP_ROM_PTR(&pin_GPIO16) },
++    { MP_ROM_QSTR(MP_QSTR_LCD_DB3), MP_ROM_PTR(&pin_GPIO17) },
++    { MP_ROM_QSTR(MP_QSTR_LCD_DB4), MP_ROM_PTR(&pin_GPIO18) },
++    { MP_ROM_QSTR(MP_QSTR_LCD_DB5), MP_ROM_PTR(&pin_GPIO19) },
++    { MP_ROM_QSTR(MP_QSTR_LCD_DB6), MP_ROM_PTR(&pin_GPIO20) },
++    { MP_ROM_QSTR(MP_QSTR_LCD_DB7), MP_ROM_PTR(&pin_GPIO21) },
++
++    { MP_ROM_QSTR(MP_QSTR_USER_SW), MP_ROM_PTR(&pin_GPIO23) },
++
++    { MP_ROM_QSTR(MP_QSTR_VBUS_DETECT), MP_ROM_PTR(&pin_GPIO24) },
++    { MP_ROM_QSTR(MP_QSTR_USER_LED), MP_ROM_PTR(&pin_GPIO25) },
++    { MP_ROM_QSTR(MP_QSTR_LIGHT_SENSE), MP_ROM_PTR(&pin_GPIO26) },
++    { MP_ROM_QSTR(MP_QSTR_SENSOR_POWER), MP_ROM_PTR(&pin_GPIO27) },
++    { MP_ROM_QSTR(MP_QSTR_REF_1V2), MP_ROM_PTR(&pin_GPIO28) },
++    { MP_ROM_QSTR(MP_QSTR_VBAT_SENSE), MP_ROM_PTR(&pin_GPIO29) },
++
++    { MP_ROM_QSTR(MP_QSTR_I2C), MP_ROM_PTR(&board_i2c_obj) },
++    { MP_ROM_QSTR(MP_QSTR_UART), MP_ROM_PTR(&board_uart_obj) },
++
++    { MP_ROM_QSTR(MP_QSTR_DISPLAY), MP_ROM_PTR(&displays[0].display)},
++};
++MP_DEFINE_CONST_DICT(board_module_globals, board_module_globals_table);
+diff --git a/ports/raspberrypi/boards/raspberry_pi_pico_w_slim/board.c b/ports/raspberrypi/boards/raspberry_pi_pico_w_slim/board.c
+new file mode 100644
+index 0000000000..331653173e
+--- /dev/null
++++ b/ports/raspberrypi/boards/raspberry_pi_pico_w_slim/board.c
+@@ -0,0 +1,29 @@
++/*
++ * This file is part of the MicroPython project, http://micropython.org/
++ *
++ * The MIT License (MIT)
++ *
++ * Copyright (c) 2021 Scott Shawcroft for Adafruit Industries
++ *
++ * Permission is hereby granted, free of charge, to any person obtaining a copy
++ * of this software and associated documentation files (the "Software"), to deal
++ * in the Software without restriction, including without limitation the rights
++ * to use, copy, modify, merge, publish, distribute, sublicense, and/or sell
++ * copies of the Software, and to permit persons to whom the Software is
++ * furnished to do so, subject to the following conditions:
++ *
++ * The above copyright notice and this permission notice shall be included in
++ * all copies or substantial portions of the Software.
++ *
++ * THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND, EXPRESS OR
++ * IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF MERCHANTABILITY,
++ * FITNESS FOR A PARTICULAR PURPOSE AND NONINFRINGEMENT. IN NO EVENT SHALL THE
++ * AUTHORS OR COPYRIGHT HOLDERS BE LIABLE FOR ANY CLAIM, DAMAGES OR OTHER
++ * LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM,
++ * OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN
++ * THE SOFTWARE.
++ */
++
++#include "supervisor/board.h"
++
++// Use the MP_WEAK supervisor/shared/board.c versions of routines not defined here.
+diff --git a/ports/raspberrypi/boards/raspberry_pi_pico_w_slim/link.ld b/ports/raspberrypi/boards/raspberry_pi_pico_w_slim/link.ld
+new file mode 100644
+index 0000000000..e814bead4c
+--- /dev/null
++++ b/ports/raspberrypi/boards/raspberry_pi_pico_w_slim/link.ld
+@@ -0,0 +1 @@
++firmware_size = 1532k;
+diff --git a/ports/raspberrypi/boards/raspberry_pi_pico_w_slim/mpconfigboard.h b/ports/raspberrypi/boards/raspberry_pi_pico_w_slim/mpconfigboard.h
+new file mode 100644
+index 0000000000..0ce1ee0ade
+--- /dev/null
++++ b/ports/raspberrypi/boards/raspberry_pi_pico_w_slim/mpconfigboard.h
+@@ -0,0 +1,10 @@
++#define MICROPY_HW_BOARD_NAME "Raspberry Pi Pico W Slim"
++#define MICROPY_HW_MCU_NAME "rp2040"
++
++#define CIRCUITPY_DIGITALIO_HAVE_INVALID_PULL (1)
++#define CIRCUITPY_DIGITALIO_HAVE_INVALID_DRIVE_MODE (1)
++
++#define MICROPY_HW_LED_STATUS   (&pin_CYW0)
++
++#define CIRCUITPY_BOARD_I2C         (1)
++#define CIRCUITPY_BOARD_I2C_PIN     {{.scl = &pin_GPIO5, .sda = &pin_GPIO4}}
+diff --git a/ports/raspberrypi/boards/raspberry_pi_pico_w_slim/mpconfigboard.mk b/ports/raspberrypi/boards/raspberry_pi_pico_w_slim/mpconfigboard.mk
+new file mode 100644
+index 0000000000..444955946e
+--- /dev/null
++++ b/ports/raspberrypi/boards/raspberry_pi_pico_w_slim/mpconfigboard.mk
+@@ -0,0 +1,31 @@
++USB_VID = 0x239A
++USB_PID = 0x8120
++USB_PRODUCT = "Pico W"
++USB_MANUFACTURER = "Raspberry Pi"
++
++CHIP_VARIANT = RP2040
++CHIP_FAMILY = rp2
++
++EXTERNAL_FLASH_DEVICES = "W25Q16JVxQ"
++
++CIRCUITPY__EVE = 1
++
++CIRCUITPY_CYW43 = 1
++CIRCUITPY_SSL = 1
++CIRCUITPY_HASHLIB = 1
++CIRCUITPY_WEB_WORKFLOW = 1
++CIRCUITPY_MDNS = 1
++CIRCUITPY_SOCKETPOOL = 1
++CIRCUITPY_WIFI = 1
++
++CIRCUITPY_PICODVI = 1
++
++# changes:
++CIRCUITPY_PICODVI = 0
++CIRCUITPY_USB_HOST = 0
++CIRCUITPY_USB_VIDEO = 0
++CIRCUITPY_WEB_WORKFLOW = 0
++
++CFLAGS += -DCYW43_PIN_WL_HOST_WAKE=24 -DCYW43_PIN_WL_REG_ON=23 -DCYW43_WL_GPIO_COUNT=3 -DCYW43_WL_GPIO_LED_PIN=0
++# Must be accompanied by a linker script change
++CFLAGS += -DCIRCUITPY_FIRMWARE_SIZE='(1536 * 1024)'
+diff --git a/ports/raspberrypi/boards/raspberry_pi_pico_w_slim/pico-sdk-configboard.h b/ports/raspberrypi/boards/raspberry_pi_pico_w_slim/pico-sdk-configboard.h
+new file mode 100644
+index 0000000000..36da55d457
+--- /dev/null
++++ b/ports/raspberrypi/boards/raspberry_pi_pico_w_slim/pico-sdk-configboard.h
+@@ -0,0 +1 @@
++// Put board-specific pico-sdk definitions here. This file must exist.
+diff --git a/ports/raspberrypi/boards/raspberry_pi_pico_w_slim/pins.c b/ports/raspberrypi/boards/raspberry_pi_pico_w_slim/pins.c
+new file mode 100644
+index 0000000000..8c85642597
+--- /dev/null
++++ b/ports/raspberrypi/boards/raspberry_pi_pico_w_slim/pins.c
+@@ -0,0 +1,54 @@
++#include "shared-bindings/board/__init__.h"
++
++STATIC const mp_rom_map_elem_t board_module_globals_table[] = {
++    CIRCUITPYTHON_BOARD_DICT_STANDARD_ITEMS
++
++    { MP_ROM_QSTR(MP_QSTR_GP0), MP_ROM_PTR(&pin_GPIO0) },
++    { MP_ROM_QSTR(MP_QSTR_GP1), MP_ROM_PTR(&pin_GPIO1) },
++    { MP_ROM_QSTR(MP_QSTR_GP2), MP_ROM_PTR(&pin_GPIO2) },
++    { MP_ROM_QSTR(MP_QSTR_GP3), MP_ROM_PTR(&pin_GPIO3) },
++    { MP_ROM_QSTR(MP_QSTR_GP4), MP_ROM_PTR(&pin_GPIO4) },
++    { MP_ROM_QSTR(MP_QSTR_GP5), MP_ROM_PTR(&pin_GPIO5) },
++    { MP_ROM_QSTR(MP_QSTR_GP6), MP_ROM_PTR(&pin_GPIO6) },
++    { MP_ROM_QSTR(MP_QSTR_GP7), MP_ROM_PTR(&pin_GPIO7) },
++    { MP_ROM_QSTR(MP_QSTR_GP8), MP_ROM_PTR(&pin_GPIO8) },
++    { MP_ROM_QSTR(MP_QSTR_GP9), MP_ROM_PTR(&pin_GPIO9) },
++    { MP_ROM_QSTR(MP_QSTR_GP10), MP_ROM_PTR(&pin_GPIO10) },
++    { MP_ROM_QSTR(MP_QSTR_GP11), MP_ROM_PTR(&pin_GPIO11) },
++    { MP_ROM_QSTR(MP_QSTR_GP12), MP_ROM_PTR(&pin_GPIO12) },
++    { MP_ROM_QSTR(MP_QSTR_GP13), MP_ROM_PTR(&pin_GPIO13) },
++    { MP_ROM_QSTR(MP_QSTR_GP14), MP_ROM_PTR(&pin_GPIO14) },
++    { MP_ROM_QSTR(MP_QSTR_GP15), MP_ROM_PTR(&pin_GPIO15) },
++    { MP_ROM_QSTR(MP_QSTR_GP16), MP_ROM_PTR(&pin_GPIO16) },
++    { MP_ROM_QSTR(MP_QSTR_GP17), MP_ROM_PTR(&pin_GPIO17) },
++    { MP_ROM_QSTR(MP_QSTR_GP18), MP_ROM_PTR(&pin_GPIO18) },
++    { MP_ROM_QSTR(MP_QSTR_GP19), MP_ROM_PTR(&pin_GPIO19) },
++    { MP_ROM_QSTR(MP_QSTR_GP20), MP_ROM_PTR(&pin_GPIO20) },
++    { MP_ROM_QSTR(MP_QSTR_GP21), MP_ROM_PTR(&pin_GPIO21) },
++    { MP_ROM_QSTR(MP_QSTR_GP22), MP_ROM_PTR(&pin_GPIO22) },
++
++    { MP_ROM_QSTR(MP_QSTR_SMPS_MODE), MP_ROM_PTR(&pin_CYW1) },
++
++    { MP_ROM_QSTR(MP_QSTR_LED), MP_ROM_PTR(&pin_CYW0) },
++
++    { MP_ROM_QSTR(MP_QSTR_VBUS_SENSE), MP_ROM_PTR(&pin_CYW2) },
++
++    { MP_ROM_QSTR(MP_QSTR_GP26_A0), MP_ROM_PTR(&pin_GPIO26) },
++    { MP_ROM_QSTR(MP_QSTR_GP26), MP_ROM_PTR(&pin_GPIO26) },
++    { MP_ROM_QSTR(MP_QSTR_A0), MP_ROM_PTR(&pin_GPIO26) },
++
++    { MP_ROM_QSTR(MP_QSTR_GP27_A1), MP_ROM_PTR(&pin_GPIO27) },
++    { MP_ROM_QSTR(MP_QSTR_GP27), MP_ROM_PTR(&pin_GPIO27) },
++    { MP_ROM_QSTR(MP_QSTR_A1), MP_ROM_PTR(&pin_GPIO27) },
++
++    { MP_ROM_QSTR(MP_QSTR_GP28_A2), MP_ROM_PTR(&pin_GPIO28) },
++    { MP_ROM_QSTR(MP_QSTR_GP28), MP_ROM_PTR(&pin_GPIO28) },
++    { MP_ROM_QSTR(MP_QSTR_A2), MP_ROM_PTR(&pin_GPIO28) },
++
++    { MP_ROM_QSTR(MP_QSTR_VOLTAGE_MONITOR), MP_ROM_PTR(&pin_GPIO29) },
++    { MP_ROM_QSTR(MP_QSTR_A3), MP_ROM_PTR(&pin_GPIO29) },
++
++
++    { MP_ROM_QSTR(MP_QSTR_STEMMA_I2C), MP_ROM_PTR(&board_i2c_obj) },
++};
++MP_DEFINE_CONST_DICT(board_module_globals, board_module_globals_table);
+diff --git a/ports/raspberrypi/boards/raspberry_pi_pico_w_ws35/board.c b/ports/raspberrypi/boards/raspberry_pi_pico_w_ws35/board.c
+new file mode 100644
+index 0000000000..331653173e
+--- /dev/null
++++ b/ports/raspberrypi/boards/raspberry_pi_pico_w_ws35/board.c
+@@ -0,0 +1,29 @@
++/*
++ * This file is part of the MicroPython project, http://micropython.org/
++ *
++ * The MIT License (MIT)
++ *
++ * Copyright (c) 2021 Scott Shawcroft for Adafruit Industries
++ *
++ * Permission is hereby granted, free of charge, to any person obtaining a copy
++ * of this software and associated documentation files (the "Software"), to deal
++ * in the Software without restriction, including without limitation the rights
++ * to use, copy, modify, merge, publish, distribute, sublicense, and/or sell
++ * copies of the Software, and to permit persons to whom the Software is
++ * furnished to do so, subject to the following conditions:
++ *
++ * The above copyright notice and this permission notice shall be included in
++ * all copies or substantial portions of the Software.
++ *
++ * THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND, EXPRESS OR
++ * IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF MERCHANTABILITY,
++ * FITNESS FOR A PARTICULAR PURPOSE AND NONINFRINGEMENT. IN NO EVENT SHALL THE
++ * AUTHORS OR COPYRIGHT HOLDERS BE LIABLE FOR ANY CLAIM, DAMAGES OR OTHER
++ * LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM,
++ * OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN
++ * THE SOFTWARE.
++ */
++
++#include "supervisor/board.h"
++
++// Use the MP_WEAK supervisor/shared/board.c versions of routines not defined here.
+diff --git a/ports/raspberrypi/boards/raspberry_pi_pico_w_ws35/link.ld b/ports/raspberrypi/boards/raspberry_pi_pico_w_ws35/link.ld
+new file mode 100644
+index 0000000000..e814bead4c
+--- /dev/null
++++ b/ports/raspberrypi/boards/raspberry_pi_pico_w_ws35/link.ld
+@@ -0,0 +1 @@
++firmware_size = 1532k;
+diff --git a/ports/raspberrypi/boards/raspberry_pi_pico_w_ws35/mpconfigboard.h b/ports/raspberrypi/boards/raspberry_pi_pico_w_ws35/mpconfigboard.h
+new file mode 100644
+index 0000000000..1b3af30cee
+--- /dev/null
++++ b/ports/raspberrypi/boards/raspberry_pi_pico_w_ws35/mpconfigboard.h
+@@ -0,0 +1,10 @@
++#define MICROPY_HW_BOARD_NAME "Raspberry Pi Pico W WS35"
++#define MICROPY_HW_MCU_NAME "rp2040"
++
++#define CIRCUITPY_DIGITALIO_HAVE_INVALID_PULL (1)
++#define CIRCUITPY_DIGITALIO_HAVE_INVALID_DRIVE_MODE (1)
++
++#define MICROPY_HW_LED_STATUS   (&pin_CYW0)
++
++#define CIRCUITPY_BOARD_I2C         (1)
++#define CIRCUITPY_BOARD_I2C_PIN     {{.scl = &pin_GPIO5, .sda = &pin_GPIO4}}
+diff --git a/ports/raspberrypi/boards/raspberry_pi_pico_w_ws35/mpconfigboard.mk b/ports/raspberrypi/boards/raspberry_pi_pico_w_ws35/mpconfigboard.mk
+new file mode 100644
+index 0000000000..6f847b106c
+--- /dev/null
++++ b/ports/raspberrypi/boards/raspberry_pi_pico_w_ws35/mpconfigboard.mk
+@@ -0,0 +1,33 @@
++USB_VID = 0x239A
++USB_PID = 0x8120
++USB_PRODUCT = "Pico W"
++USB_MANUFACTURER = "Raspberry Pi"
++
++CHIP_VARIANT = RP2040
++CHIP_FAMILY = rp2
++
++EXTERNAL_FLASH_DEVICES = "W25Q16JVxQ"
++
++CIRCUITPY__EVE = 1
++
++CIRCUITPY_CYW43 = 1
++CIRCUITPY_SSL = 1
++CIRCUITPY_HASHLIB = 1
++CIRCUITPY_WEB_WORKFLOW = 1
++CIRCUITPY_MDNS = 1
++CIRCUITPY_SOCKETPOOL = 1
++CIRCUITPY_WIFI = 1
++
++CIRCUITPY_PICODVI = 1
++
++# changes:
++CIRCUITPY_PICODVI = 0
++CIRCUITPY_USB_HOST = 0
++CIRCUITPY_USB_VIDEO = 0
++CIRCUITPY_WEB_WORKFLOW = 0
++
++CFLAGS += -DCYW43_PIN_WL_HOST_WAKE=24 -DCYW43_PIN_WL_REG_ON=23 -DCYW43_WL_GPIO_COUNT=3 -DCYW43_WL_GPIO_LED_PIN=0
++# Must be accompanied by a linker script change
++CFLAGS += -DCIRCUITPY_FIRMWARE_SIZE='(1536 * 1024)'
++
++FROZEN_MPY_DIRS += $(TOP)/frozen/ili9488_waveshare35
+diff --git a/ports/raspberrypi/boards/raspberry_pi_pico_w_ws35/pico-sdk-configboard.h b/ports/raspberrypi/boards/raspberry_pi_pico_w_ws35/pico-sdk-configboard.h
+new file mode 100644
+index 0000000000..36da55d457
+--- /dev/null
++++ b/ports/raspberrypi/boards/raspberry_pi_pico_w_ws35/pico-sdk-configboard.h
+@@ -0,0 +1 @@
++// Put board-specific pico-sdk definitions here. This file must exist.
+diff --git a/ports/raspberrypi/boards/raspberry_pi_pico_w_ws35/pins.c b/ports/raspberrypi/boards/raspberry_pi_pico_w_ws35/pins.c
+new file mode 100644
+index 0000000000..8c85642597
+--- /dev/null
++++ b/ports/raspberrypi/boards/raspberry_pi_pico_w_ws35/pins.c
+@@ -0,0 +1,54 @@
++#include "shared-bindings/board/__init__.h"
++
++STATIC const mp_rom_map_elem_t board_module_globals_table[] = {
++    CIRCUITPYTHON_BOARD_DICT_STANDARD_ITEMS
++
++    { MP_ROM_QSTR(MP_QSTR_GP0), MP_ROM_PTR(&pin_GPIO0) },
++    { MP_ROM_QSTR(MP_QSTR_GP1), MP_ROM_PTR(&pin_GPIO1) },
++    { MP_ROM_QSTR(MP_QSTR_GP2), MP_ROM_PTR(&pin_GPIO2) },
++    { MP_ROM_QSTR(MP_QSTR_GP3), MP_ROM_PTR(&pin_GPIO3) },
++    { MP_ROM_QSTR(MP_QSTR_GP4), MP_ROM_PTR(&pin_GPIO4) },
++    { MP_ROM_QSTR(MP_QSTR_GP5), MP_ROM_PTR(&pin_GPIO5) },
++    { MP_ROM_QSTR(MP_QSTR_GP6), MP_ROM_PTR(&pin_GPIO6) },
++    { MP_ROM_QSTR(MP_QSTR_GP7), MP_ROM_PTR(&pin_GPIO7) },
++    { MP_ROM_QSTR(MP_QSTR_GP8), MP_ROM_PTR(&pin_GPIO8) },
++    { MP_ROM_QSTR(MP_QSTR_GP9), MP_ROM_PTR(&pin_GPIO9) },
++    { MP_ROM_QSTR(MP_QSTR_GP10), MP_ROM_PTR(&pin_GPIO10) },
++    { MP_ROM_QSTR(MP_QSTR_GP11), MP_ROM_PTR(&pin_GPIO11) },
++    { MP_ROM_QSTR(MP_QSTR_GP12), MP_ROM_PTR(&pin_GPIO12) },
++    { MP_ROM_QSTR(MP_QSTR_GP13), MP_ROM_PTR(&pin_GPIO13) },
++    { MP_ROM_QSTR(MP_QSTR_GP14), MP_ROM_PTR(&pin_GPIO14) },
++    { MP_ROM_QSTR(MP_QSTR_GP15), MP_ROM_PTR(&pin_GPIO15) },
++    { MP_ROM_QSTR(MP_QSTR_GP16), MP_ROM_PTR(&pin_GPIO16) },
++    { MP_ROM_QSTR(MP_QSTR_GP17), MP_ROM_PTR(&pin_GPIO17) },
++    { MP_ROM_QSTR(MP_QSTR_GP18), MP_ROM_PTR(&pin_GPIO18) },
++    { MP_ROM_QSTR(MP_QSTR_GP19), MP_ROM_PTR(&pin_GPIO19) },
++    { MP_ROM_QSTR(MP_QSTR_GP20), MP_ROM_PTR(&pin_GPIO20) },
++    { MP_ROM_QSTR(MP_QSTR_GP21), MP_ROM_PTR(&pin_GPIO21) },
++    { MP_ROM_QSTR(MP_QSTR_GP22), MP_ROM_PTR(&pin_GPIO22) },
++
++    { MP_ROM_QSTR(MP_QSTR_SMPS_MODE), MP_ROM_PTR(&pin_CYW1) },
++
++    { MP_ROM_QSTR(MP_QSTR_LED), MP_ROM_PTR(&pin_CYW0) },
++
++    { MP_ROM_QSTR(MP_QSTR_VBUS_SENSE), MP_ROM_PTR(&pin_CYW2) },
++
++    { MP_ROM_QSTR(MP_QSTR_GP26_A0), MP_ROM_PTR(&pin_GPIO26) },
++    { MP_ROM_QSTR(MP_QSTR_GP26), MP_ROM_PTR(&pin_GPIO26) },
++    { MP_ROM_QSTR(MP_QSTR_A0), MP_ROM_PTR(&pin_GPIO26) },
++
++    { MP_ROM_QSTR(MP_QSTR_GP27_A1), MP_ROM_PTR(&pin_GPIO27) },
++    { MP_ROM_QSTR(MP_QSTR_GP27), MP_ROM_PTR(&pin_GPIO27) },
++    { MP_ROM_QSTR(MP_QSTR_A1), MP_ROM_PTR(&pin_GPIO27) },
++
++    { MP_ROM_QSTR(MP_QSTR_GP28_A2), MP_ROM_PTR(&pin_GPIO28) },
++    { MP_ROM_QSTR(MP_QSTR_GP28), MP_ROM_PTR(&pin_GPIO28) },
++    { MP_ROM_QSTR(MP_QSTR_A2), MP_ROM_PTR(&pin_GPIO28) },
++
++    { MP_ROM_QSTR(MP_QSTR_VOLTAGE_MONITOR), MP_ROM_PTR(&pin_GPIO29) },
++    { MP_ROM_QSTR(MP_QSTR_A3), MP_ROM_PTR(&pin_GPIO29) },
++
++
++    { MP_ROM_QSTR(MP_QSTR_STEMMA_I2C), MP_ROM_PTR(&board_i2c_obj) },
++};
++MP_DEFINE_CONST_DICT(board_module_globals, board_module_globals_table);
 diff --git a/shared-module/displayio/bus_core.c b/shared-module/displayio/bus_core.c
-index 301606c1f3..0b434ccd05 100644
+index e01b9d9eef..f95ecbdbe3 100644
 --- a/shared-module/displayio/bus_core.c
 +++ b/shared-module/displayio/bus_core.c
-@@ -145,12 +145,12 @@ void displayio_display_bus_set_region_to_update(displayio_display_bus_t *self, d
+@@ -129,12 +129,12 @@ void displayio_display_bus_set_region_to_update(displayio_display_bus_t *self, d
  
      // Set column.
      displayio_display_bus_begin_transaction(self);
@@ -17,7 +2826,7 @@ index 301606c1f3..0b434ccd05 100644
          data_length = 0;
      } else {
          data_type = DISPLAY_COMMAND;
-@@ -164,9 +164,13 @@ void displayio_display_bus_set_region_to_update(displayio_display_bus_t *self, d
+@@ -148,9 +148,13 @@ void displayio_display_bus_set_region_to_update(displayio_display_bus_t *self, d
              x1 = __builtin_bswap16(x1);
              x2 = __builtin_bswap16(x2);
          }
@@ -31,7 +2840,7 @@ index 301606c1f3..0b434ccd05 100644
          data[data_length++] = x2 & 0xff;
      }
  
-@@ -196,7 +200,7 @@ void displayio_display_bus_set_region_to_update(displayio_display_bus_t *self, d
+@@ -180,7 +184,7 @@ void displayio_display_bus_set_region_to_update(displayio_display_bus_t *self, d
      data[0] = self->row_command;
      data_length = 1;
      if (!self->data_as_commands) {
@@ -40,7 +2849,7 @@ index 301606c1f3..0b434ccd05 100644
          data_length = 0;
      }
  
-@@ -208,9 +212,13 @@ void displayio_display_bus_set_region_to_update(displayio_display_bus_t *self, d
+@@ -192,9 +196,13 @@ void displayio_display_bus_set_region_to_update(displayio_display_bus_t *self, d
              y1 = __builtin_bswap16(y1);
              y2 = __builtin_bswap16(y2);
          }

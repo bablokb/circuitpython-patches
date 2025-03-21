@@ -1,8 +1,8 @@
 diff --git a/locale/circuitpython.pot b/locale/circuitpython.pot
-index 456f5e698d..22c76a0dea 100644
+index 167fb20ff9..c6c233e123 100644
 --- a/locale/circuitpython.pot
 +++ b/locale/circuitpython.pot
-@@ -2889,6 +2884,10 @@ msgstr ""
+@@ -2893,6 +2893,10 @@ msgstr ""
  msgid "corrupted file"
  msgstr ""
  
@@ -14,10 +14,10 @@ index 456f5e698d..22c76a0dea 100644
  msgid "could not invert Vandermonde matrix"
  msgstr ""
 diff --git a/locale/de_DE.po b/locale/de_DE.po
-index 56334697e6..c1a966b625 100644
+index 749ba35fd3..d7de76a812 100644
 --- a/locale/de_DE.po
 +++ b/locale/de_DE.po
-@@ -1566,6 +1566,10 @@ msgstr "Keine langen Integer (long) unterstützt"
+@@ -1570,6 +1570,10 @@ msgstr "Keine langen Integer (long) unterstützt"
  msgid "No network with that ssid"
  msgstr "Kein Netzwerk mit dieser SSID"
  
