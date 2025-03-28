@@ -19,6 +19,15 @@ addressing mode.
 Download: [ili9488_waveshare.patch](9.2.x/ili9488_waveshare.patch)
 
 
+RP2xxx Slim
+-----------
+
+This patch tweaks a number of default configuration settings to
+increase free RAM (with 9.2.6: about 14K more free RAM at startup).
+
+Download: [rp2xxx_slim.patch](9.2.x/rp2xxx_slim.patch)
+
+
 RP2xxx Fix-Connect
 ------------------
 
