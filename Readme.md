@@ -16,7 +16,7 @@ Some of the Waveshare displays have a strange 16-bit addressing mode. This
 patch fixes `shared-module/displayio/bus_core.c` to allow for this
 addressing mode.
 
-Download: [ili9488_waveshare.patch](patches/ili9488_waveshare.patch)
+Download: [ili9488_waveshare.patch](9.2.x/ili9488_waveshare.patch)
 
 
 RP2xxx Fix-Connect
@@ -31,7 +31,7 @@ This fix automatically rechecks the link-status during the timeout
 period, either until the timeout expires or until a successful connect
 is detected.
 
-Download: [patches/rp2xxx_fixconnect.patch](patches/rp2xxx_fixconnect.patch)
+Download: [rp2xxx_fixconnect.patch](9.2.x/rp2xxx_fixconnect.patch)
 
 
 RP2xxx Low-Power
@@ -46,7 +46,7 @@ and on-going activities (e.g. playing music) will stop. It is the duty
 of the application code to deinit/reinit any peripherals cleanly before
 and after light-sleep.
 
-Download: [rp2xxx_low_power.patch](patches/rp2xxx_low_power.patch)
+Download: [rp2xxx_low_power.patch](9.2.x/rp2xxx_low_power.patch)
 
 
 ESP32AT
@@ -55,4 +55,4 @@ ESP32AT
 This patch enables <https://github.com/bablokb/circuitpython-esp32at> as
 a submodule and adds it as a frozen module to various boards.
 
-Download: [esp32at.patch](patches/esp32at.patch)
+Download: [esp32at.patch](9.2.x/esp32at.patch)
