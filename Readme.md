@@ -65,3 +65,14 @@ This patch enables <https://github.com/bablokb/circuitpython-esp32at> as
 a submodule and adds it as a frozen module to various boards.
 
 Download: [esp32at.patch](9.2.x/esp32at.patch)
+
+
+ACEP No Clean
+-------------
+
+This patch disables the extra clean cycle during refreshing of ACEP
+e-paper displays. This time-consuming operation is not necessary with
+every refresh and can be triggered manually from application side by
+sending a pure white image to the display.
+
+Downlaod: [acep_no_clean.patch](9.2.x/acep_no_clean.patch)
