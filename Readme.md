@@ -9,6 +9,27 @@ All patches are provided "as is", they might or might not work (anymore). Only
 apply these patches if you know why and what you are doing.
 
 
+Patching CircuitPython
+----------------------
+
+Applying a single patch is easy:
+
+    git clone https://github.com/adafruit/circuitpython
+    git switch main                   # not necessary for a single patch
+    git switch -c my_patched_branch_1
+    git apply path/to/patch
+
+If you want to apply multiple patches, then repeat the last three
+steps for every patch. After that, you have n branches. Finally, merge
+all branches:
+
+    git switch -c my_final_branch
+    git merge my_patch_branch_1
+    ...
+    git merge my_patch_branch_n
+
+
+
 Waveshare ILI9488 Displays
 --------------------------
 
