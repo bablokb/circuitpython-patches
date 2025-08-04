@@ -14,9 +14,9 @@ Waveshare ILI9488 Displays
 
 Some of the Waveshare displays have a strange 16-bit addressing mode. This
 patch fixes `shared-module/displayio/bus_core.c` to allow for this
-addressing mode.
+addressing mode and adds a suitable ILI9488 driver to the frozen libs.
 
-Download: [ili9488_waveshare.patch](9.2.x/ili9488_waveshare.patch)
+Download: [spi8_p16.patch](9.2.x/spi8_p16.patch)
 
 
 RP2xxx Slim
