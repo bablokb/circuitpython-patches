@@ -37,7 +37,8 @@ Some of the Waveshare displays have a strange 16-bit addressing mode. This
 patch fixes `shared-module/displayio/bus_core.c` to allow for this
 addressing mode and adds a suitable ILI9488 driver to the frozen libs.
 
-Download: [spi8_p16.patch](9.2.x/spi8_p16.patch)
+  - Download 9.2.x: [spi8_p16.patch](9.2.x/spi8_p16.patch)
+  - Download 10.0.x: [spi8_p16.patch](10.0.x/spi8_p16.patch)
 
 
 RP2xxx Slim
@@ -46,7 +47,8 @@ RP2xxx Slim
 This patch tweaks a number of default configuration settings to
 increase free RAM (with 9.2.6: about 14K more free RAM at startup).
 
-Download: [rp2xxx_slim.patch](9.2.x/rp2xxx_slim.patch)
+  - Download 9.2.x: [rp2xxx_slim.patch](9.2.x/rp2xxx_slim.patch)
+  - Download 10.0.x: [rp2xxx_slim.patch](10.0.x/rp2xxx_slim.patch)
 
 
 RP2xxx Fix-Connect
@@ -61,7 +63,8 @@ This fix automatically rechecks the link-status during the timeout
 period, either until the timeout expires or until a successful connect
 is detected.
 
-Download: [rp2xxx_fixconnect.patch](9.2.x/rp2xxx_fixconnect.patch)
+  - Download 9.2.x: [rp2xxx_fixconnect.patch](9.2.x/rp2xxx_fixconnect.patch)
+  - Download 10.0.x: [rp2xxx_fixconnect.patch](10.0.x/rp2xxx_fixconnect.patch)
 
 
 RP2xxx Low-Power
@@ -76,7 +79,8 @@ and on-going activities (e.g. playing music) will stop. It is the duty
 of the application code to deinit/reinit any peripherals cleanly before
 and after light-sleep.
 
-Download: [rp2xxx_low_power.patch](9.2.x/rp2xxx_low_power.patch)
+  - Download 9.2.x: [rp2xxx_low_power.patch](9.2.x/rp2xxx_low_power.patch)
+  - Download 10.0.x: [rp2xxx_low_power.patch](10.0.x/rp2xxx_low_power.patch)
 
 
 ESP32AT
@@ -85,7 +89,8 @@ ESP32AT
 This patch enables <https://github.com/bablokb/circuitpython-esp32at> as
 a submodule and adds it as a frozen module to various boards.
 
-Download: [esp32at.patch](9.2.x/esp32at.patch)
+  - Download 9.2.x: [esp32at.patch](9.2.x/esp32at.patch)
+  - Download 10.0.x: [esp32at.patch](10.0.x/esp32at.patch)
 
 
 ACEP No Clean
@@ -96,4 +101,5 @@ e-paper displays. This time-consuming operation is not necessary with
 every refresh and can be triggered manually from application side by
 sending a pure white image to the display.
 
-Downlaod: [acep_no_clean.patch](9.2.x/acep_no_clean.patch)
+  - Download 9.2.x: [acep_no_clean.patch](9.2.x/acep_no_clean.patch)
+  - Download 10.0.x: [acep_no_clean.patch](10.0.x/acep_no_clean.patch)
