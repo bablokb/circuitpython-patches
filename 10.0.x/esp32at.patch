@@ -1,0 +1,89 @@
+diff --git a/.gitmodules b/.gitmodules
+index b89769942a..934b7cbaab 100644
+--- a/.gitmodules
++++ b/.gitmodules
+@@ -2,6 +2,9 @@
+ #
+ # SPDX-License-Identifier: MIT
+ 
++[submodule "frozen/circuitpython-esp32at"]
++	path = frozen/circuitpython-esp32at
++	url = https://github.com/bablokb/circuitpython-esp32at
+ [submodule "lib/axtls"]
+ 	path = lib/axtls
+ 	url = https://github.com/micropython/axtls.git
+diff --git a/frozen/circuitpython-esp32at b/frozen/circuitpython-esp32at
+new file mode 160000
+index 0000000000..79ca5bad94
+--- /dev/null
++++ b/frozen/circuitpython-esp32at
+@@ -0,0 +1 @@
++Subproject commit 79ca5bad94f451f067dc47332de2db176bdfa164
+diff --git a/ports/raspberrypi/boards/challenger_rp2350_bconnect/mpconfigboard.mk b/ports/raspberrypi/boards/challenger_rp2350_bconnect/mpconfigboard.mk
+index 44e9b49295..75722c700b 100644
+--- a/ports/raspberrypi/boards/challenger_rp2350_bconnect/mpconfigboard.mk
++++ b/ports/raspberrypi/boards/challenger_rp2350_bconnect/mpconfigboard.mk
+@@ -14,3 +14,4 @@ CIRCUITPY_ALARM = 0
+ 
+ FROZEN_MPY_DIRS += $(TOP)/frozen/Adafruit_CircuitPython_HID
+ FROZEN_MPY_DIRS += $(TOP)/frozen/Adafruit_CircuitPython_Register
++FROZEN_MPY_DIRS += $(TOP)/frozen/circuitpython-esp32at
+diff --git a/ports/raspberrypi/boards/challenger_rp2350_wifi6_ble5/mpconfigboard.mk b/ports/raspberrypi/boards/challenger_rp2350_wifi6_ble5/mpconfigboard.mk
+index d4f2cdb90d..36fae3a85e 100644
+--- a/ports/raspberrypi/boards/challenger_rp2350_wifi6_ble5/mpconfigboard.mk
++++ b/ports/raspberrypi/boards/challenger_rp2350_wifi6_ble5/mpconfigboard.mk
+@@ -14,3 +14,4 @@ CIRCUITPY_ALARM = 0
+ 
+ FROZEN_MPY_DIRS += $(TOP)/frozen/Adafruit_CircuitPython_HID
+ FROZEN_MPY_DIRS += $(TOP)/frozen/Adafruit_CircuitPython_Register
++FROZEN_MPY_DIRS += $(TOP)/frozen/circuitpython-esp32at
+diff --git a/ports/raspberrypi/boards/pimoroni_badger2040/mpconfigboard.mk b/ports/raspberrypi/boards/pimoroni_badger2040/mpconfigboard.mk
+index 818f56300c..c0e88244b5 100644
+--- a/ports/raspberrypi/boards/pimoroni_badger2040/mpconfigboard.mk
++++ b/ports/raspberrypi/boards/pimoroni_badger2040/mpconfigboard.mk
+@@ -11,3 +11,5 @@ EXTERNAL_FLASH_DEVICES = "W25Q16JVxQ"
+ CIRCUITPY__EVE = 1
+ CIRCUITPY_PICODVI = 0
+ CIRCUITPY_USB_HOST = 0
++
++FROZEN_MPY_DIRS += $(TOP)/frozen/circuitpython-esp32at
+diff --git a/ports/raspberrypi/boards/pimoroni_pico_plus2/mpconfigboard.mk b/ports/raspberrypi/boards/pimoroni_pico_plus2/mpconfigboard.mk
+index d47f28d64f..f72c2e6232 100644
+--- a/ports/raspberrypi/boards/pimoroni_pico_plus2/mpconfigboard.mk
++++ b/ports/raspberrypi/boards/pimoroni_pico_plus2/mpconfigboard.mk
+@@ -10,3 +10,5 @@ CHIP_FAMILY = rp2
+ EXTERNAL_FLASH_DEVICES = "W25Q128JVxQ"
+ 
+ CIRCUITPY__EVE = 1
++
++FROZEN_MPY_DIRS += $(TOP)/frozen/circuitpython-esp32at
+diff --git a/ports/raspberrypi/boards/pimoroni_tinyfx/mpconfigboard.mk b/ports/raspberrypi/boards/pimoroni_tinyfx/mpconfigboard.mk
+index 7708e8f264..7ba877607c 100644
+--- a/ports/raspberrypi/boards/pimoroni_tinyfx/mpconfigboard.mk
++++ b/ports/raspberrypi/boards/pimoroni_tinyfx/mpconfigboard.mk
+@@ -11,3 +11,5 @@ EXTERNAL_FLASH_DEVICES = "W25Q32JVxQ"
+ CIRCUITPY__EVE = 1
+ CIRCUITPY_PICODVI = 0
+ CIRCUITPY_USB_HOST = 0
++
++FROZEN_MPY_DIRS += $(TOP)/frozen/circuitpython-esp32at
+diff --git a/ports/raspberrypi/boards/raspberry_pi_pico/mpconfigboard.mk b/ports/raspberrypi/boards/raspberry_pi_pico/mpconfigboard.mk
+index 20607d50e4..b3a454fc87 100644
+--- a/ports/raspberrypi/boards/raspberry_pi_pico/mpconfigboard.mk
++++ b/ports/raspberrypi/boards/raspberry_pi_pico/mpconfigboard.mk
+@@ -10,3 +10,5 @@ EXTERNAL_FLASH_DEVICES = "W25Q16JVxQ"
+ 
+ CIRCUITPY__EVE = 1
+ CIRCUITPY_PICODVI = 1
++
++FROZEN_MPY_DIRS += $(TOP)/frozen/circuitpython-esp32at
+diff --git a/ports/raspberrypi/boards/raspberry_pi_pico2/mpconfigboard.mk b/ports/raspberrypi/boards/raspberry_pi_pico2/mpconfigboard.mk
+index 43328dd470..8624f56506 100644
+--- a/ports/raspberrypi/boards/raspberry_pi_pico2/mpconfigboard.mk
++++ b/ports/raspberrypi/boards/raspberry_pi_pico2/mpconfigboard.mk
+@@ -10,3 +10,5 @@ CHIP_FAMILY = rp2
+ EXTERNAL_FLASH_DEVICES = "W25Q32JVxQ"
+ 
+ CIRCUITPY__EVE = 1
++
++FROZEN_MPY_DIRS += $(TOP)/frozen/circuitpython-esp32at

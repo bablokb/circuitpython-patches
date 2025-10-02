@@ -1,0 +1,51 @@
+diff --git a/py/circuitpy_mpconfig.mk b/py/circuitpy_mpconfig.mk
+index 8c838a4121..13c204d558 100644
+--- a/py/circuitpy_mpconfig.mk
++++ b/py/circuitpy_mpconfig.mk
+@@ -48,6 +48,10 @@ enable-if-not=$(if $(filter 1,$(1)),0,1)
+ # of CIRCUITPY_AUDIOCORE and CIRCUITPY_AUDIOMP3 below are typical of how
+ # any/all are expected to be used.
+ 
++# don't use extra clean cycle on ACEP displays
++CIRCUITPY_ACEP_CLEAN ?= 0
++CFLAGS += -DCIRCUITPY_ACEP_CLEAN=$(CIRCUITPY_ACEP_CLEAN)
++
+ # Always on. Present here to help generate documentation module support matrix for "builtins".
+ CIRCUITPY = 1
+ CFLAGS += -DCIRCUITPY=$(CIRCUITPY)
+diff --git a/shared-module/epaperdisplay/EPaperDisplay.c b/shared-module/epaperdisplay/EPaperDisplay.c
+index 556db6ae22..b65e05756e 100644
+--- a/shared-module/epaperdisplay/EPaperDisplay.c
++++ b/shared-module/epaperdisplay/EPaperDisplay.c
+@@ -377,6 +377,7 @@ static bool epaperdisplay_epaperdisplay_refresh_area(epaperdisplay_epaperdisplay
+     return true;
+ }
+ 
++#if CIRCUITPY_ACEP_CLEAN
+ static bool _clean_area(epaperdisplay_epaperdisplay_obj_t *self) {
+     uint16_t width = displayio_display_core_get_width(&self->core);
+     uint16_t height = displayio_display_core_get_height(&self->core);
+@@ -406,6 +407,7 @@ static bool _clean_area(epaperdisplay_epaperdisplay_obj_t *self) {
+ 
+     return true;
+ }
++#endif
+ 
+ bool common_hal_epaperdisplay_epaperdisplay_refresh(epaperdisplay_epaperdisplay_obj_t *self) {
+ 
+@@ -434,6 +436,7 @@ bool common_hal_epaperdisplay_epaperdisplay_refresh(epaperdisplay_epaperdisplay_
+     if (current_area == NULL) {
+         return true;
+     }
++#if CIRCUITPY_ACEP_CLEAN
+     if (self->acep) {
+         epaperdisplay_epaperdisplay_start_refresh(self);
+         _clean_area(self);
+@@ -442,6 +445,7 @@ bool common_hal_epaperdisplay_epaperdisplay_refresh(epaperdisplay_epaperdisplay_
+             RUN_BACKGROUND_TASKS;
+         }
+     }
++#endif
+     if (mp_hal_is_interrupted()) {
+         return false;
+     }
