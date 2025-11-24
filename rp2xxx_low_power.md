@@ -48,12 +48,12 @@ The implementation now also uses "dormant"-mode for pin-alarms. In addition,
 it shuts down the CYW43 of the Pico-W during light-sleep. This reduces
 current draw dramatically:
 
-           |   LS-TA |   LS-PA | DS-TA  | DS-PA  |
------------|---------|---------|--------|--------|
-Pico       |  1.20mA |  0.78mA | 1.20mA | 0.78mA |
-  (10.0.3) | 13.7 mA | 14.0 mA | 6.85mA | 0.95mA |
-Pico-W     |  0.43mA |  0.34mA | 0.44mA | 0.34mA |
-  (10.0.3) | 35.9 mA | 35.9 mA | 1.45mA | 0.38mA |
+|           |   LS-TA |   LS-PA | DS-TA  | DS-PA  |
+|-----------|---------|---------|--------|--------|
+|Pico       |  1.20mA |  0.78mA | 1.20mA | 0.78mA |
+|  (10.0.3) | 13.7 mA | 14.0 mA | 6.85mA | 0.95mA |
+|Pico-W     |  0.43mA |  0.34mA | 0.44mA | 0.34mA |
+|  (10.0.3) | 35.9 mA | 35.9 mA | 1.45mA | 0.38mA |
 
 
 Correct Pin in `alarm.wake_alarm`
