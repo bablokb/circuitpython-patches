@@ -60,7 +60,7 @@ Correct Pin in `alarm.wake_alarm`
 ---------------------------------
 
 Mainline does not provide the pin that triggered the wakeup from deep-sleep.
-With this patch, the field `alarm.wake_alarm.pn` is set correctly.
+With this patch, the field `alarm.wake_alarm.pin` is set correctly.
 
 
 Correct `microcontroller.cpu.reset_reason`
