@@ -70,14 +70,11 @@ is detected.
 RP2xxx Low-Power
 ----------------
 
-This patch reimplements light-sleep/deep-sleep from the alarm-module to
-provide aggressive power-saving. It also implements the alarm-module for
-the RP2350.
+**Be sure to read the [details](rp2xxx_low_power.md) about this patch
+before you apply it!**
 
-Due to the aggressive power-saving connections are lost during light-sleep
-and on-going activities (e.g. playing music) will stop. It is the duty
-of the application code to deinit/reinit any peripherals cleanly before
-and after light-sleep.
+Note that this patch is more advanced for 10.0.x than for
+9.2.x. Backporting it should be simple but I did not do it yet.
 
   - Download 9.2.x: [rp2xxx_low_power.patch](9.2.x/rp2xxx_low_power.patch)
   - Download 10.0.x: [rp2xxx_low_power.patch](10.0.x/rp2xxx_low_power.patch)

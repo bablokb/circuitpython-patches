@@ -1,8 +1,36 @@
+diff --git a/main.c b/main.c
+index f4f67b0434..d5c0bfd6df 100644
+--- a/main.c
++++ b/main.c
+@@ -696,7 +696,12 @@ static bool __attribute__((noinline)) run_code_py(safe_mode_t safe_mode, bool *s
+                 board_deinit();
+ 
+                 // Continue with true deep sleep even if workflow is available.
++                // (unconditionally with compile-time config)
++                #ifdef NO_FAKESLEEP
++                if (true) {
++                #else
+                 if (awoke_from_true_deep_sleep || !supervisor_workflow_active()) {
++                #endif
+                     // Enter true deep sleep. When we wake up we'll be back at the
+                     // top of main(), not in this loop.
+                     common_hal_alarm_enter_deep_sleep();
 diff --git a/ports/raspberrypi/Makefile b/ports/raspberrypi/Makefile
-index b75d542325..06e3478205 100644
+index b75d542325..8a5e433826 100644
 --- a/ports/raspberrypi/Makefile
 +++ b/ports/raspberrypi/Makefile
-@@ -535,6 +535,7 @@ SRC_C += \
+@@ -451,6 +451,10 @@ INC += \
+ 
+ CFLAGS += -DPICO_RP2350=1
+ 
++ifeq ($(RP2350_POWMAN), 1)
++CFLAGS += -DRP2350_POWMAN
++endif
++
+ SRC_SDK_CHIP_VARIANT := \
+ 	src/rp2_common/hardware_powman/powman.c \
+ 
+@@ -535,6 +539,7 @@ SRC_C += \
  	bindings/rp2pio/__init__.c \
  	common-hal/rp2pio/StateMachine.c \
  	common-hal/rp2pio/__init__.c \
@@ -79,10 +107,10 @@ index 70f9ec294f..daf555491b 100644
 +extern void bindings_cyw43_power_down(void);
 +extern bool bindings_cyw43_power_up(void);
 diff --git a/ports/raspberrypi/common-hal/alarm/__init__.c b/ports/raspberrypi/common-hal/alarm/__init__.c
-index c47ddc3150..53d5891686 100644
+index c47ddc3150..e0e4c5edbb 100644
 --- a/ports/raspberrypi/common-hal/alarm/__init__.c
 +++ b/ports/raspberrypi/common-hal/alarm/__init__.c
-@@ -4,6 +4,9 @@
+@@ -4,10 +4,14 @@
  //
  // SPDX-License-Identifier: MIT
  
@@ -92,20 +120,25 @@ index c47ddc3150..53d5891686 100644
  #include "py/gc.h"
  #include "py/obj.h"
  #include "py/objtuple.h"
-@@ -20,10 +23,12 @@
+ #include "py/runtime.h"
++#include "py/mphal.h"
+ #include "shared/runtime/interrupt_char.h"
+ 
+ #include "shared-bindings/alarm/__init__.h"
+@@ -20,10 +24,10 @@
  
  #if CIRCUITPY_CYW43
  #include "bindings/cyw43/__init__.h"
 +#include "common-hal/wifi/__init__.h"
  #endif
  
- #include "supervisor/port.h"
- #include "supervisor/shared/workflow.h"
-+#include "supervisor/shared/serial.h"  // serial_connected()
+-#include "supervisor/port.h"
+-#include "supervisor/shared/workflow.h"
++#include "supervisor/workflow.h"    // for supervisor_workflow_active()
  
  #include "pico/stdlib.h"
  #include "hardware/sync.h"
-@@ -32,43 +37,303 @@
+@@ -32,42 +36,330 @@
  #include "hardware/structs/scb.h"
  #include "hardware/watchdog.h"
  #include "hardware/structs/watchdog.h"
@@ -115,8 +148,41 @@ index c47ddc3150..53d5891686 100644
  #include "hardware/pll.h"
  #include "hardware/regs/io_bank0.h"
  
+-// Watchdog scratch register
+-// Not used elsewhere in the SDK for now, keep an eye on it
+-#define RP_WKUP_SCRATCH_REG 0
+-
+-// Light sleep turns off nonvolatile Busio and other wake-only peripherals
+-// TODO: this only saves about 2mA right now, expand with other non-essentials
+-const uint32_t RP_LIGHTSLEEP_EN0_MASK = ~(
+-    CLOCKS_SLEEP_EN0_CLK_SYS_SPI1_BITS |
+-    CLOCKS_SLEEP_EN0_CLK_PERI_SPI1_BITS |
+-    CLOCKS_SLEEP_EN0_CLK_SYS_SPI0_BITS |
+-    CLOCKS_SLEEP_EN0_CLK_PERI_SPI0_BITS |
+-    CLOCKS_SLEEP_EN0_CLK_SYS_PWM_BITS |
+-    CLOCKS_SLEEP_EN0_CLK_SYS_PIO1_BITS |
+-    CLOCKS_SLEEP_EN0_CLK_SYS_PIO0_BITS |
+-    CLOCKS_SLEEP_EN0_CLK_SYS_I2C1_BITS |
+-    CLOCKS_SLEEP_EN0_CLK_SYS_I2C0_BITS |
+-    CLOCKS_SLEEP_EN0_CLK_SYS_ADC_BITS |
+-    CLOCKS_SLEEP_EN0_CLK_ADC_ADC_BITS
+-    );
+-// This bank has the USB clocks in it, leave it for now
+-const uint32_t RP_LIGHTSLEEP_EN1_MASK = CLOCKS_SLEEP_EN1_RESET;
+-
+-// Light sleeps used for TimeAlarm deep sleep turn off almost everything
+-const uint32_t RP_LIGHTSLEEP_EN0_MASK_HARSH = (
+-    CLOCKS_SLEEP_EN0_CLK_RTC_RTC_BITS |
+-    CLOCKS_SLEEP_EN0_CLK_SYS_PADS_BITS
+-    );
+-const uint32_t RP_LIGHTSLEEP_EN1_MASK_HARSH = 0x0;
+-
+-static void prepare_for_dormant_xosc(void);
 +#ifdef PICO_RP2350
 +#include "hardware/powman.h"
++#ifdef RP2350_POWMAN
++#include "hardware/structs/usb.h"
++#endif
 +#endif
 +
 +#include "pico.h"
@@ -130,9 +196,8 @@ index c47ddc3150..53d5891686 100644
 +
 +#ifdef SLEEP_DEBUG
 +#include "py/mpprint.h"
-+#include "py/mphal.h"
 +#define DEBUG_PRINT(fmt, ...) ((void)mp_printf(&mp_plat_print, "DBG:%s:%04d: " fmt "\n", __FILE__, __LINE__,##__VA_ARGS__))
-+#define SLEEP(ms) mp_hal_delay_ms(ms)
++#define SLEEP(ms) mp_hal_delay_us(1000*ms)
 +#else
 +#define DEBUG_PRINT(fmt, ...)((void)0)
 +#define SLEEP(ms)((void)0)
@@ -144,7 +209,7 @@ index c47ddc3150..53d5891686 100644
 +// since some of the coding is already part of e.g. time/TimeAlarm.c or
 +// pin/PinAlarm.c.
 +//
-+// Additional code (rosc.[cħ]) is from pico-extras/src/rp2_common/hardware_rosc.
++// Additional code (rosc.[ch]) is from pico-extras/src/rp2_common/hardware_rosc.
 +// Since pico-extras is currently not pulled in as a submodule, these
 +// two files are copied into common-hal/alarm and used as is.
 +//
@@ -163,6 +228,9 @@ index c47ddc3150..53d5891686 100644
 +    DORMANT_SOURCE_LPOSC, // rp2350 only
 +} dormant_source_t;
 +
++// from supervisor/port.c, which does not have a header-file
++extern void reset_cpu_full(bool full) NORETURN;
++
 +static void _sleep_run_from_dormant_source(dormant_source_t dormant_source);
 +
 +static inline void _sleep_run_from_xosc(void) {
@@ -173,12 +241,28 @@ index c47ddc3150..53d5891686 100644
 +static inline void _sleep_run_from_lposc(void) {
 +    _sleep_run_from_dormant_source(DORMANT_SOURCE_LPOSC);
 +}
++#ifdef RP2350_POWMAN
++static void _powman_disable_usb(void);
++static void _powman_init(void);
++static int _powman_power_off(void);
++static powman_power_state _off_state;
++static powman_power_state _on_state;
++static const bool _use_powman = true;
++#else
++static const bool _use_powman = false;
++#endif
 +#endif
 +
 +static dormant_source_t _dormant_source;
 +
-+// State of the serial connection
-+static bool _serial_connected;
++// State of the workflow
++static bool _is_workflow_active(void) {
++    #ifdef IGNORE_WORKFLOW
++    return false;
++    #else
++    return supervisor_workflow_active();
++    #endif
++}
 +
 +// In order to go into dormant mode we need to be running from a stoppable clock source:
 +// either the xosc or rosc with no PLLs running. This means we disable the USB and ADC clocks
@@ -337,15 +421,20 @@ index c47ddc3150..53d5891686 100644
 +    // Re-enable the ring oscillator, which will essentially kickstart the proc
 +    rosc_enable();
 +
-+    // Reset the sleep enable register so peripherals and other hardware can be used
-+    clocks_hw->sleep_en0 = _saved_sleep_en0;
-+    clocks_hw->sleep_en1 = _saved_sleep_en1;
++    // Reset the sleep enable register so peripherals
++    // and other hardware can be used (only if set)
++    if (_saved_sleep_en0) {
++        clocks_hw->sleep_en0 = _saved_sleep_en0;
++        clocks_hw->sleep_en1 = _saved_sleep_en1;
++        _saved_sleep_en0 = 0;
++        _saved_sleep_en1 = 0;
++    }
 +
 +    // Restore all clocks
 +    clocks_init();
 +
 +    #ifdef PICO_RP2350
-+    // make powerman use xosc again
++    // make powman use xosc again
 +    uint64_t restore_ms = powman_timer_get_ms();
 +    powman_timer_set_1khz_tick_source_xosc();
 +    powman_timer_set_ms(restore_ms);
@@ -365,20 +454,20 @@ index c47ddc3150..53d5891686 100644
 +//             PinAlarm  -> use dormant with gpio-wakeup
 +//
 +// The low-level implementation does not differentiate between light-sleep
-+// and deep-sleep.
-+static void _goto_sleep_or_dormant(void) {
++// and deep-sleep unless POWMAN is used.
++
++static void _goto_sleep_or_dormant(bool is_deep_sleep) {
 +    DEBUG_PRINT("_goto_sleep_or_dormant");
 +    bool timealarm_set = alarm_time_timealarm_is_set();
-+    _serial_connected = serial_connected();
 +    DEBUG_PRINT("time-alarm: %s", timealarm_set ? "true": "false");
-+    DEBUG_PRINT("serial: %s", _serial_connected ? "true": "false");
 +    SLEEP(10);
 +
 +    // Just before sleep, enable the pinalarm interrupt.
 +    alarm_pin_pinalarm_entering_deep_sleep();
 +
-+    // when serial is connected, only fake sleep/dormant
-+    if (_serial_connected) {
++    // when workflow is active, only fake sleep
++    if (_is_workflow_active()) {
++      DEBUG_PRINT("active workflow, faking sleep");
 +        __wfi();
 +        return;
 +    }
@@ -396,59 +485,41 @@ index c47ddc3150..53d5891686 100644
 +    }
 +    _sleep_power_up();
 +    #else
-+    _sleep_run_from_lposc();
-+    if (timealarm_set) {
-+        _sleep_goto_dormant_until();
++    if (_use_powman && is_deep_sleep) {
++        alarm_pin_powman_set_gpio_wakeup();
++        _powman_init();
++        _powman_power_off();
++    } else {
++        _sleep_run_from_lposc();
++        if (timealarm_set) {
++            _sleep_goto_dormant_until();
++        }
++        _sleep_go_dormant();
++        _sleep_power_up();
 +    }
-+    _sleep_go_dormant();
-+    _sleep_power_up();
 +    #endif
 +}
-+
- // Watchdog scratch register
- // Not used elsewhere in the SDK for now, keep an eye on it
- #define RP_WKUP_SCRATCH_REG 0
  
--// Light sleep turns off nonvolatile Busio and other wake-only peripherals
--// TODO: this only saves about 2mA right now, expand with other non-essentials
--const uint32_t RP_LIGHTSLEEP_EN0_MASK = ~(
--    CLOCKS_SLEEP_EN0_CLK_SYS_SPI1_BITS |
--    CLOCKS_SLEEP_EN0_CLK_PERI_SPI1_BITS |
--    CLOCKS_SLEEP_EN0_CLK_SYS_SPI0_BITS |
--    CLOCKS_SLEEP_EN0_CLK_PERI_SPI0_BITS |
--    CLOCKS_SLEEP_EN0_CLK_SYS_PWM_BITS |
--    CLOCKS_SLEEP_EN0_CLK_SYS_PIO1_BITS |
--    CLOCKS_SLEEP_EN0_CLK_SYS_PIO0_BITS |
--    CLOCKS_SLEEP_EN0_CLK_SYS_I2C1_BITS |
--    CLOCKS_SLEEP_EN0_CLK_SYS_I2C0_BITS |
--    CLOCKS_SLEEP_EN0_CLK_SYS_ADC_BITS |
--    CLOCKS_SLEEP_EN0_CLK_ADC_ADC_BITS
--    );
--// This bank has the USB clocks in it, leave it for now
--const uint32_t RP_LIGHTSLEEP_EN1_MASK = CLOCKS_SLEEP_EN1_RESET;
--
--// Light sleeps used for TimeAlarm deep sleep turn off almost everything
--const uint32_t RP_LIGHTSLEEP_EN0_MASK_HARSH = (
--    CLOCKS_SLEEP_EN0_CLK_RTC_RTC_BITS |
--    CLOCKS_SLEEP_EN0_CLK_SYS_PADS_BITS
--    );
--const uint32_t RP_LIGHTSLEEP_EN1_MASK_HARSH = 0x0;
--
--static void prepare_for_dormant_xosc(void);
--
  // Singleton instance of SleepMemory.
  const alarm_sleep_memory_obj_t alarm_sleep_memory_obj = {
-     .base = {
-@@ -81,6 +346,8 @@ const alarm_sleep_memory_obj_t alarm_sleep_memory_obj = {
+@@ -81,20 +373,27 @@ const alarm_sleep_memory_obj_t alarm_sleep_memory_obj = {
  alarm_wake_alarm_union_t alarm_wake_alarm;
  
  void alarm_reset(void) {
 +    DEBUG_PRINT("alarm_reset");
++    #ifdef RP2350_POWMAN
++    DEBUG_PRINT("PWRUP0:            0x%04lx", powman_hw->pwrup[0]);
++    DEBUG_PRINT("LAST_SWCORE_PWRUP: 0x%04lx", powman_hw->last_swcore_pwrup);
 +    SLEEP(10);
++    #endif
      alarm_sleep_memory_reset();
      alarm_pin_pinalarm_reset();
      alarm_time_timealarm_reset();
-@@ -92,9 +359,13 @@ void alarm_reset(void) {
+-
+-    // Reset the scratch source
+-    watchdog_hw->scratch[RP_WKUP_SCRATCH_REG] = RP_SLEEP_WAKEUP_UNDEF;
+ }
+ 
  static uint8_t _get_wakeup_cause(void) {
      // First check if the modules remember what last woke up
      if (alarm_pin_pinalarm_woke_this_cycle()) {
@@ -462,19 +533,73 @@ index c47ddc3150..53d5891686 100644
          return RP_SLEEP_WAKEUP_RTC;
      }
      // If waking from true deep sleep, modules will have lost their state,
-@@ -107,8 +378,11 @@ static uint8_t _get_wakeup_cause(void) {
+@@ -107,8 +406,24 @@ static uint8_t _get_wakeup_cause(void) {
  
  // Set up light sleep or deep sleep alarms.
  static void _setup_sleep_alarms(bool deep_sleep, size_t n_alarms, const mp_obj_t *alarms) {
+-    alarm_pin_pinalarm_set_alarms(deep_sleep, n_alarms, alarms);
 +    DEBUG_PRINT("_setup_sleep_alarms (start)");
-     alarm_pin_pinalarm_set_alarms(deep_sleep, n_alarms, alarms);
++    DEBUG_PRINT("workflow: %s", _is_workflow_active() ? "active": "idle");
++    SLEEP(10);
++
++    #ifdef RP2350_POWMAN
++    if (deep_sleep) {
++        powman_disable_all_wakeups();
++        powman_timer_disable_alarm();
++        powman_clear_alarm();
++    }
++    #endif
++    // deep-sleep uses powman, while light-sleep/fake-sleep use normal gpio
++    // wakeup
++    alarm_pin_pinalarm_set_alarms(deep_sleep && !_is_workflow_active(),
++                                  n_alarms, alarms);
      alarm_time_timealarm_set_alarms(deep_sleep, n_alarms, alarms);
 +    DEBUG_PRINT("_setup_sleep_alarms (finished)");
 +    SLEEP(10);
  }
  
  bool common_hal_alarm_woken_from_sleep(void) {
-@@ -137,14 +411,12 @@ mp_obj_t common_hal_alarm_record_wake_alarm(void) {
+@@ -118,14 +433,37 @@ bool common_hal_alarm_woken_from_sleep(void) {
+ mp_obj_t common_hal_alarm_record_wake_alarm(void) {
+     // If woken from deep sleep, create a copy alarm similar to what would have
+     // been passed in originally. Otherwise, just return none
+-    uint8_t cause = _get_wakeup_cause();
++
++    DEBUG_PRINT("common_hal_alarm_record_wake_alarm");
++    uint8_t cause;
++    uint32_t pm_cause = 0;
++    #ifdef RP2350_POWMAN
++    if (!_is_workflow_active()) {
++        pm_cause = powman_hw->last_swcore_pwrup;
++        if (pm_cause & 0x40) {
++            cause = RP_SLEEP_WAKEUP_RTC;
++        } else if (pm_cause & 0x1E) {
++            cause = RP_SLEEP_WAKEUP_GPIO;
++        } else {
++            cause = RP_SLEEP_WAKEUP_UNDEF;
++        }
++        DEBUG_PRINT("LAST_SWCORE_PWRUP: 0x%04lx", pm_cause);
++        SLEEP(10);
++    } else {
++        cause = _get_wakeup_cause();
++    }
++    #else
++    cause = _get_wakeup_cause();
++    #endif
++    DEBUG_PRINT("cause:             %u", cause);
++
+     switch (cause) {
+         case RP_SLEEP_WAKEUP_RTC: {
+             return alarm_time_timealarm_record_wake_alarm();
+         }
+ 
+         case RP_SLEEP_WAKEUP_GPIO: {
+-            return alarm_pin_pinalarm_record_wake_alarm();
++            return alarm_pin_pinalarm_record_wake_alarm(pm_cause);
+         }
+ 
+         case RP_SLEEP_WAKEUP_UNDEF:
+@@ -137,14 +475,12 @@ mp_obj_t common_hal_alarm_record_wake_alarm(void) {
  }
  
  mp_obj_t common_hal_alarm_light_sleep_until_alarms(size_t n_alarms, const mp_obj_t *alarms) {
@@ -491,7 +616,7 @@ index c47ddc3150..53d5891686 100644
      while (!mp_hal_is_interrupted()) {
          RUN_BACKGROUND_TASKS;
          // Detect if interrupt was alarm or ctrl-C interrupt.
-@@ -166,26 +438,13 @@ mp_obj_t common_hal_alarm_light_sleep_until_alarms(size_t n_alarms, const mp_obj
+@@ -166,26 +502,13 @@ mp_obj_t common_hal_alarm_light_sleep_until_alarms(size_t n_alarms, const mp_obj
              shared_alarm_save_wake_alarm(wake_alarm);
              break;
          }
@@ -504,7 +629,7 @@ index c47ddc3150..53d5891686 100644
 -        scb_hw->scr |= M0PLUS_SCR_SLEEPDEEP_BITS;
 -
 -        __wfi();
-+        _goto_sleep_or_dormant();
++        _goto_sleep_or_dormant(false);
      }
  
 -    // Restore clocks so other wfi() uses, like time.sleep(), won't use the light-sleep settings.
@@ -519,16 +644,16 @@ index c47ddc3150..53d5891686 100644
      alarm_reset();
      return wake_alarm;
  }
-@@ -198,67 +457,15 @@ void common_hal_alarm_set_deep_sleep_alarms(size_t n_alarms, const mp_obj_t *ala
+@@ -198,67 +521,98 @@ void common_hal_alarm_set_deep_sleep_alarms(size_t n_alarms, const mp_obj_t *ala
  }
  
  void NORETURN common_hal_alarm_enter_deep_sleep(void) {
 -    bool timealarm_set = alarm_time_timealarm_is_set();
- 
+-
 -    #if CIRCUITPY_CYW43
 -    cyw43_enter_deep_sleep();
 -    #endif
--
+ 
 -    // If there's a timealarm, just enter a very deep light sleep
 -    if (timealarm_set) {
 -        // Prune the clock for sleep
@@ -544,20 +669,21 @@ index c47ddc3150..53d5891686 100644
 -    }
 -    // // TODO: support ROSC when available in SDK
 -    // rosc_set_dormant();
-+    _goto_sleep_or_dormant();
++    _goto_sleep_or_dormant(true);
  
      // Reset uses the watchdog. Use scratch registers to store wake reason
      watchdog_hw->scratch[RP_WKUP_SCRATCH_REG] = _get_wakeup_cause();
  
 -    // Just before reset, enable the pinalarm interrupt.
 -    alarm_pin_pinalarm_entering_deep_sleep();
-     reset_cpu();
+-    reset_cpu();
++    reset_cpu_full(false);
  }
  
  void common_hal_alarm_gc_collect(void) {
      gc_collect_ptr(shared_alarm_get_wake_alarm());
  }
--
+ 
 -static void prepare_for_dormant_xosc(void) {
 -    // TODO: add ROSC support with sleep_run_from_dormant_source when it's added to SDK
 -    uint src_hz = XOSC_MHZ * MHZ;
@@ -587,12 +713,154 @@ index c47ddc3150..53d5891686 100644
 -        src_hz);
 -    pll_deinit(pll_sys);
 -    pll_deinit(pll_usb);
--}
++#ifdef RP2350_POWMAN
++static void _powman_init(void) {
++    // Unlock the VREG control interface
++    hw_set_bits(&powman_hw->vreg_ctrl,
++                POWMAN_PASSWORD_BITS | POWMAN_VREG_CTRL_UNLOCK_BITS);
++    // Turn off USB PHY and apply pull downs on DP & DM
++    _powman_disable_usb();
++
++    // no need to start powman and set the time
++    // (already done in common-hal/rtc/RTC.c (aon_timer_start))
++
++    // Allow power down when debugger connected
++    powman_set_debug_power_request_ignored(true);
++
++    // Power states
++    powman_power_state P1_5 = POWMAN_POWER_STATE_NONE;
++    P1_5 = powman_power_state_with_domain_on(P1_5,
++                                             POWMAN_POWER_DOMAIN_SRAM_BANK0);
++
++    powman_power_state P0_1 = POWMAN_POWER_STATE_NONE;
++    P0_1 = powman_power_state_with_domain_on(P0_1,
++                                             POWMAN_POWER_DOMAIN_SWITCHED_CORE);
++    P0_1 = powman_power_state_with_domain_on(P0_1,
++                                             POWMAN_POWER_DOMAIN_XIP_CACHE);
++    P0_1 = powman_power_state_with_domain_on(P0_1,
++                                             POWMAN_POWER_DOMAIN_SRAM_BANK0);
++
++    _off_state = P1_5;
++    _on_state = P0_1;
+ }
++
++// Initiate power off
++static int _powman_power_off(void) {
++    // Set power states
++    bool valid_state = powman_configure_wakeup_state(_off_state, _on_state);
++    if (!valid_state) {
++        mp_hal_delay_us(500*1000);
++        return PICO_ERROR_INVALID_STATE;
++    }
++
++    // reboot to main
++    // TODO: reboot to wakeup-function?!
++    //       see: https://github.com/mamba2410/rp2350-powman-sleep
++    //            https://forums.raspberrypi.com/viewtopic.php?t=384176
++
++    powman_hw->boot[0] = 0;
++    powman_hw->boot[1] = 0;
++    powman_hw->boot[2] = 0;
++    powman_hw->boot[3] = 0;
++
++    // Switch to required power state
++    int rc = powman_set_power_state(_off_state);
++    if (rc == PICO_ERROR_PRECONDITION_NOT_MET) {
++        // PICO_ERROR_PRECONDITION_NOT_MET == -14 -> pending pwrup req
++        mp_hal_delay_us(3000*1000);
++    } else if (rc == PICO_ERROR_TIMEOUT) {
++        // PICO_ERROR_TIMEOUT = -2 -> pending pwrup req? oder waiting-bits
++        mp_hal_delay_us(2000*1000);
++    } else if (rc == PICO_ERROR_INVALID_ARG) {
++        // PICO_ERROR_INVALID_ARG == -5 -> invalid state
++        mp_hal_delay_us(5000*1000);
++    }
++    if (rc != PICO_OK) {
++        mp_hal_delay_us(-100*rc*1000);
++        return rc;                           // note: this will cause reset
++      //hard_assert(rc == PICO_OK);
++    }
++
++    // Power down
++    while (true) __wfi();
++}
++
++static void _powman_disable_usb(void) {
++    usb_hw->phy_direct = USB_USBPHY_DIRECT_TX_PD_BITS | USB_USBPHY_DIRECT_RX_PD_BITS | USB_USBPHY_DIRECT_DM_PULLDN_EN_BITS | USB_USBPHY_DIRECT_DP_PULLDN_EN_BITS;
++    usb_hw->phy_direct_override = USB_USBPHY_DIRECT_RX_DM_BITS | USB_USBPHY_DIRECT_RX_DP_BITS |          USB_USBPHY_DIRECT_RX_DD_BITS |
++        USB_USBPHY_DIRECT_OVERRIDE_TX_DIFFMODE_OVERRIDE_EN_BITS | USB_USBPHY_DIRECT_OVERRIDE_DM_PULLUP_OVERRIDE_EN_BITS | USB_USBPHY_DIRECT_OVERRIDE_TX_FSSLEW_OVERRIDE_EN_BITS |
++        USB_USBPHY_DIRECT_OVERRIDE_TX_PD_OVERRIDE_EN_BITS | USB_USBPHY_DIRECT_OVERRIDE_RX_PD_OVERRIDE_EN_BITS | USB_USBPHY_DIRECT_OVERRIDE_TX_DM_OVERRIDE_EN_BITS |
++        USB_USBPHY_DIRECT_OVERRIDE_TX_DP_OVERRIDE_EN_BITS | USB_USBPHY_DIRECT_OVERRIDE_TX_DM_OE_OVERRIDE_EN_BITS | USB_USBPHY_DIRECT_OVERRIDE_TX_DP_OE_OVERRIDE_EN_BITS |
++        USB_USBPHY_DIRECT_OVERRIDE_DM_PULLDN_EN_OVERRIDE_EN_BITS | USB_USBPHY_DIRECT_OVERRIDE_DP_PULLDN_EN_OVERRIDE_EN_BITS | USB_USBPHY_DIRECT_OVERRIDE_DP_PULLUP_EN_OVERRIDE_EN_BITS |
++        USB_USBPHY_DIRECT_OVERRIDE_DM_PULLUP_HISEL_OVERRIDE_EN_BITS | USB_USBPHY_DIRECT_OVERRIDE_DP_PULLUP_HISEL_OVERRIDE_EN_BITS;
++}
++#endif
+diff --git a/ports/raspberrypi/common-hal/alarm/__init__.h b/ports/raspberrypi/common-hal/alarm/__init__.h
+index 49e06a4c32..2c3c04270b 100644
+--- a/ports/raspberrypi/common-hal/alarm/__init__.h
++++ b/ports/raspberrypi/common-hal/alarm/__init__.h
+@@ -16,6 +16,11 @@
+ #define RP_SLEEP_WAKEUP_GPIO    1
+ #define RP_SLEEP_WAKEUP_RTC     2
+ 
++// Watchdog scratch register
++// Not used elsewhere in the SDK for now, keep an eye on it
++#define RP_WKUP_SCRATCH_REG 0
++#define RP_WKUP_PA_SCRATCH_REG 1
++
+ typedef union {
+     alarm_pin_pinalarm_obj_t pin_alarm;
+     alarm_time_timealarm_obj_t time_alarm;
 diff --git a/ports/raspberrypi/common-hal/alarm/pin/PinAlarm.c b/ports/raspberrypi/common-hal/alarm/pin/PinAlarm.c
-index 350306390e..f0715d112f 100644
+index 350306390e..f89d710fad 100644
 --- a/ports/raspberrypi/common-hal/alarm/pin/PinAlarm.c
 +++ b/ports/raspberrypi/common-hal/alarm/pin/PinAlarm.c
-@@ -30,7 +30,7 @@ static void gpio_callback(uint gpio, uint32_t events) {
+@@ -14,23 +14,50 @@
+ #include "pico/stdlib.h"
+ #include "hardware/gpio.h"
+ #include "hardware/structs/iobank0.h"
++#include "hardware/watchdog.h"
++#include "hardware/structs/watchdog.h"
++
++#ifdef PICO_RP2350
++#include "hardware/powman.h"
++#include "hardware/regs/powman.h"
++#endif
++
++#ifdef SLEEP_DEBUG
++#include <inttypes.h>
++#include "py/mpprint.h"
++#define DEBUG_PRINT(fmt, ...) ((void)mp_printf(&mp_plat_print, "DBG:%s:%04d: " fmt "\n", __FILE__, __LINE__,##__VA_ARGS__))
++#else
++#define DEBUG_PRINT(fmt, ...)((void)0)
++#endif
++
++#ifdef RP2350_POWMAN
++#include "py/mphal.h"
++#define POWMAN_MAX_WAKEUP_SLOTS (count_of(powman_hw->pwrup))
++static unsigned _powman_wakeup_slots = 0;  // instances 0-3 available
++typedef struct {
++    uint32_t pin_number;
++    bool edge;
++    bool value;
++    bool pull;
++} powman_gpio_wakeup_data;
++static powman_gpio_wakeup_data _powman_gpio_data[POWMAN_MAX_WAKEUP_SLOTS];
++#endif
+ 
+ static bool woke_up;
+-static uint64_t alarm_triggered_pins; // 36 actual pins
+ static uint64_t alarm_reserved_pins; // 36 actual pins
+ static bool _not_yet_deep_sleeping = false;
+ 
+ #define GPIO_IRQ_ALL_EVENTS 0x15u
+ 
+ static void gpio_callback(uint gpio, uint32_t events) {
+-    alarm_triggered_pins |= (1 << gpio);
++    watchdog_hw->scratch[RP_WKUP_PA_SCRATCH_REG] = gpio;
+     woke_up = true;
+ 
+     // gpio_acknowledge_irq(gpio, events) is called automatically, before this callback is called.
  
      if (_not_yet_deep_sleeping) {
          // Event went off prematurely, before we went to sleep, so set it again.
@@ -601,7 +869,55 @@ index 350306390e..f0715d112f 100644
      } else {
          // Went off during sleep.
          // Disable IRQ automatically.
-@@ -97,7 +97,11 @@ void alarm_pin_pinalarm_reset(void) {
+@@ -76,28 +103,54 @@ mp_obj_t alarm_pin_pinalarm_find_triggered_alarm(size_t n_alarms, const mp_obj_t
+             continue;
+         }
+         alarm_pin_pinalarm_obj_t *alarm = MP_OBJ_TO_PTR(alarms[i]);
+-        if (alarm_triggered_pins & (1 << alarm->pin->number)) {
++        if (watchdog_hw->scratch[RP_WKUP_PA_SCRATCH_REG] == alarm->pin->number) {
+             return alarms[i];
+         }
+     }
+     return mp_const_none;
+ }
+ 
+-mp_obj_t alarm_pin_pinalarm_record_wake_alarm(void) {
++mp_obj_t alarm_pin_pinalarm_record_wake_alarm(uint32_t pm_cause) {
+     alarm_pin_pinalarm_obj_t *const alarm = &alarm_wake_alarm.pin_alarm;
+ 
+     alarm->base.type = &alarm_pin_pinalarm_type;
+-    // TODO: how to obtain the correct pin from memory?
+-    alarm->pin = NULL;
++
++    #ifdef PICO_RP2350
++    // if POWMAN woke us up, get the pin from the POWMAN-registers
++    // check which bit (1-4) of pm_cause == LAST_SWCORE_PWRUP is set
++    if (pm_cause > 0) {
++      int i;
++      for (i=1; i<5; ++i) {
++        if (pm_cause & (1<<i)) {
++          break;
++        }
++      }
++      if (i<5) {
++        alarm->pin = mcu_get_pin_by_number(powman_hw->pwrup[i-1] &
++                                           POWMAN_PWRUP0_SOURCE_BITS);
++      } else {
++        alarm->pin = NULL;
++      }
++      return alarm;
++    }
++    #endif
++
++    // otherwise, we read the watchdog scratch register set by
++    // gpio_callback()
++    alarm->pin = mcu_get_pin_by_number(
++          watchdog_hw->scratch[RP_WKUP_PA_SCRATCH_REG]);
+     return alarm;
+ }
+ 
+ void alarm_pin_pinalarm_reset(void) {
+-    alarm_triggered_pins = 0;
      woke_up = false;
  
      // Clear all GPIO interrupts
@@ -613,7 +929,7 @@ index 350306390e..f0715d112f 100644
          iobank0_hw->intr[i] = 0;
      }
  
-@@ -105,6 +109,7 @@ void alarm_pin_pinalarm_reset(void) {
+@@ -105,47 +158,111 @@ void alarm_pin_pinalarm_reset(void) {
      for (size_t i = 0; i < NUM_BANK0_GPIOS; i++) {
          if (alarm_reserved_pins & (1 << i)) {
              gpio_set_irq_enabled(i, GPIO_IRQ_ALL_EVENTS, false);
@@ -621,17 +937,155 @@ index 350306390e..f0715d112f 100644
              reset_pin_number(i);
          }
      }
-@@ -141,9 +146,7 @@ void alarm_pin_pinalarm_set_alarms(bool deep_sleep, size_t n_alarms, const mp_ob
-             }
+     alarm_reserved_pins = 0;
++    #ifdef RP2350_POWMAN
++    powman_disable_all_wakeups();
++    _powman_wakeup_slots = 0;
++    #endif
+ }
  
-             gpio_set_irq_enabled_with_callback((uint)alarm->pin->number, event, true, &gpio_callback);
+ void alarm_pin_pinalarm_set_alarms(bool deep_sleep, size_t n_alarms, const mp_obj_t *alarms) {
++    #ifdef RP2350_POWMAN
++    int wakeup_slot = 0;
++    powman_gpio_wakeup_data *gpio_info;
++    bool use_powman = deep_sleep;
++    #endif
+     for (size_t i = 0; i < n_alarms; i++) {
+         if (mp_obj_is_type(alarms[i], &alarm_pin_pinalarm_type)) {
+             alarm_pin_pinalarm_obj_t *alarm = MP_OBJ_TO_PTR(alarms[i]);
+ 
+-            gpio_init(alarm->pin->number);
+-            if (alarm->pull) {
+-                // If value is high, the pullup should be off, and vice versa
+-                gpio_set_pulls(alarm->pin->number, !alarm->value, alarm->value);
++            #ifdef RP2350_POWMAN
++            if (use_powman) {
++                if (_powman_wakeup_slots < POWMAN_MAX_WAKEUP_SLOTS) {
++                    wakeup_slot = _powman_wakeup_slots++;
++                } else {
++                    // ignore for now, maybe raise exception??
++                    continue;
++                }
++                // save now for later use
++                DEBUG_PRINT("saving GPIO-wakeup for GPIO %d in slot %d",
++                            alarm->pin->number,wakeup_slot);
++                gpio_info = &(_powman_gpio_data[wakeup_slot]);
++                gpio_info->pin_number = alarm->pin->number;
++                gpio_info->edge = alarm->edge;
++                gpio_info->value = alarm->value;
++                gpio_info->pull = alarm->pull;
+             } else {
+-                // Clear in case the pulls are already on
+-                gpio_set_pulls(alarm->pin->number, false, false);
+-            }
+-            gpio_set_dir(alarm->pin->number, GPIO_IN);
+-            // Don't reset at end of VM (instead, pinalarm_reset will reset before next VM)
+-            common_hal_never_reset_pin(alarm->pin);
+-            alarm_reserved_pins |= (1 << alarm->pin->number);
+-
+-            uint32_t event;
+-            if (alarm->value == true && alarm->edge == true) {
+-                event = GPIO_IRQ_EDGE_RISE;
+-            } else if (alarm->value == false && alarm->edge == true) {
+-                event = GPIO_IRQ_EDGE_FALL;
+-            } else if (alarm->value == true && alarm->edge == false) {
+-                event = GPIO_IRQ_LEVEL_HIGH;
+-            } else { // both false
+-                event = GPIO_IRQ_LEVEL_LOW;
+-            }
++            #endif
++                DEBUG_PRINT("configuring GPIO-wakeup for GPIO %d",
++                            alarm->pin->number);
++                gpio_init(alarm->pin->number);
++                gpio_set_dir(alarm->pin->number, GPIO_IN);
++                if (alarm->pull) {
++                    // If value is high, the pullup should be off, and vice versa
++                    gpio_set_pulls(alarm->pin->number, !alarm->value, alarm->value);
++                } else {
++                    // Clear in case the pulls are already on
++                    gpio_set_pulls(alarm->pin->number, false, false);
++                }
++
++                // Don't reset at end of VM (instead, pinalarm_reset will reset before next VM)
++                common_hal_never_reset_pin(alarm->pin);
++                alarm_reserved_pins |= (1 << alarm->pin->number);
+ 
+-            gpio_set_irq_enabled_with_callback((uint)alarm->pin->number, event, true, &gpio_callback);
 -            if (deep_sleep) {
 -                gpio_set_dormant_irq_enabled((uint)alarm->pin->number, event, true);
--            }
-+            gpio_set_dormant_irq_enabled((uint)alarm->pin->number, event, true);
++                uint32_t event;
++                if (alarm->value == true && alarm->edge == true) {
++                    event = GPIO_IRQ_EDGE_RISE;
++                } else if (alarm->value == false && alarm->edge == true) {
++                    event = GPIO_IRQ_EDGE_FALL;
++                } else if (alarm->value == true && alarm->edge == false) {
++                    event = GPIO_IRQ_LEVEL_HIGH;
++                } else { // both false
++                    event = GPIO_IRQ_LEVEL_LOW;
++                }
++
++                gpio_set_irq_enabled_with_callback((uint)alarm->pin->number,
++                                                   event, true, &gpio_callback);
++                gpio_set_dormant_irq_enabled((uint)alarm->pin->number,
++                                             event, true);
++                _not_yet_deep_sleeping = true;
++            #ifdef RP2350_POWMAN
+             }
++            #endif
++        }
++    }
++}
  
-             _not_yet_deep_sleeping = true;
+-            _not_yet_deep_sleeping = true;
++#ifdef RP2350_POWMAN
++void alarm_pin_powman_set_gpio_wakeup(void) {
++    powman_gpio_wakeup_data gpio_info;
++    for (unsigned i=0; i<_powman_wakeup_slots; ++i) {
++        gpio_info = _powman_gpio_data[i];
++        gpio_deinit(gpio_info.pin_number);
++        gpio_init(gpio_info.pin_number);
++        gpio_set_dir(gpio_info.pin_number, GPIO_IN);
++        if (gpio_info.pull) {
++            // If value is high, the pullup should be off, and vice versa
++            gpio_set_pulls(gpio_info.pin_number, !gpio_info.value, gpio_info.value);
++        } else {
++            // Clear in case the pulls are already on
++            gpio_set_pulls(gpio_info.pin_number, false, false);
++        }
++        if (gpio_get(gpio_info.pin_number) == gpio_info.value) {
++            while(gpio_get(gpio_info.pin_number) == gpio_info.value) {
++                mp_hal_delay_us(10000);
++            }
          }
++        DEBUG_PRINT("enabling PowMan GPIO-wakeup on GPIO %d, slot %d",
++                    gpio_info.pin_number,i);
++        powman_disable_gpio_wakeup(i);
++        powman_enable_gpio_wakeup(i, gpio_info.pin_number,
++                                  gpio_info.edge, gpio_info.value);
++        DEBUG_PRINT("PWRUP%d: 0x%04lx", i, powman_hw->pwrup[i]);
++        DEBUG_PRINT("");
+     }
+ }
++#endif
+diff --git a/ports/raspberrypi/common-hal/alarm/pin/PinAlarm.h b/ports/raspberrypi/common-hal/alarm/pin/PinAlarm.h
+index b9f81da847..4c48d0ea01 100644
+--- a/ports/raspberrypi/common-hal/alarm/pin/PinAlarm.h
++++ b/ports/raspberrypi/common-hal/alarm/pin/PinAlarm.h
+@@ -20,10 +20,13 @@ typedef struct {
+ } alarm_pin_pinalarm_obj_t;
+ 
+ mp_obj_t alarm_pin_pinalarm_find_triggered_alarm(size_t n_alarms, const mp_obj_t *alarms);
+-mp_obj_t alarm_pin_pinalarm_record_wake_alarm(void);
++mp_obj_t alarm_pin_pinalarm_record_wake_alarm(uint32_t pm_cause);
+ 
+ void alarm_pin_pinalarm_reset(void);
+ void alarm_pin_pinalarm_light_reset(void);
+ void alarm_pin_pinalarm_set_alarms(bool deep_sleep, size_t n_alarms, const mp_obj_t *alarms);
+ bool alarm_pin_pinalarm_woke_this_cycle(void);
+ void alarm_pin_pinalarm_entering_deep_sleep(void);
++#ifdef RP2350_POWMAN
++void alarm_pin_powman_set_gpio_wakeup(void);
++#endif
 diff --git a/ports/raspberrypi/common-hal/alarm/rosc.c b/ports/raspberrypi/common-hal/alarm/rosc.c
 new file mode 100644
 index 0000000000..05a18c0d05
@@ -812,7 +1266,7 @@ index 0000000000..c4cb9aaa29
 +
 +#endif
 diff --git a/ports/raspberrypi/common-hal/alarm/time/TimeAlarm.c b/ports/raspberrypi/common-hal/alarm/time/TimeAlarm.c
-index 1f7c3f9eda..fef8ac23d1 100644
+index 1f7c3f9eda..731be23370 100644
 --- a/ports/raspberrypi/common-hal/alarm/time/TimeAlarm.c
 +++ b/ports/raspberrypi/common-hal/alarm/time/TimeAlarm.c
 @@ -4,21 +4,30 @@
@@ -926,11 +1380,124 @@ index 1f7c3f9eda..fef8ac23d1 100644
 +    #ifdef PICO_RP2040
 +    aon_timer_enable_alarm(&t, &timer_callback, deep_sleep);
 +    #else
-+    aon_timer_enable_alarm(&t, &timer_callback, true);
++    aon_timer_enable_alarm(&t, &timer_callback, true);  // this uses POWMAN_TIMER
 +    #endif
      woke_up = false;
  }
  
+diff --git a/ports/raspberrypi/common-hal/microcontroller/Processor.c b/ports/raspberrypi/common-hal/microcontroller/Processor.c
+index a3ea890d9a..24661f08e6 100644
+--- a/ports/raspberrypi/common-hal/microcontroller/Processor.c
++++ b/ports/raspberrypi/common-hal/microcontroller/Processor.c
+@@ -10,6 +10,7 @@
+ #include "py/mphal.h"
+ #include "py/runtime.h"
+ #include "common-hal/microcontroller/Processor.h"
++#include "common-hal/alarm/__init__.h"    // for SCRATCH-register defines
+ #include "shared-bindings/microcontroller/Processor.h"
+ #include "shared-bindings/microcontroller/ResetReason.h"
+ #include "shared-bindings/time/__init__.h"
+@@ -97,6 +98,12 @@ mcu_reset_reason_t common_hal_mcu_processor_get_reset_reason(void) {
+     }
+     #endif
+     #ifdef PICO_RP2350
++    #ifdef RP2350_POWMAN
++    // check if one of the bits 1-4 (gpio wakeup) or 6 (alarm wakeup) is on
++    if (powman_hw->last_swcore_pwrup & 0x5E) {
++        return RESET_REASON_DEEP_SLEEP_ALARM;
++    }
++    #endif
+     uint32_t chip_reset_reg = powman_hw->chip_reset;
+ 
+     if (chip_reset_reg & POWMAN_CHIP_RESET_HAD_RESCUE_BITS) {
+@@ -121,6 +128,9 @@ mcu_reset_reason_t common_hal_mcu_processor_get_reset_reason(void) {
+     // The watchdog is used for software reboots such as resetting after copying a UF2 via the bootloader.
+     if (watchdog_caused_reboot()) {
+         reason = RESET_REASON_SOFTWARE;
++        if (watchdog_hw->scratch[RP_WKUP_SCRATCH_REG] != RP_SLEEP_WAKEUP_UNDEF) {
++            reason = RESET_REASON_DEEP_SLEEP_ALARM;
++        }
+     }
+ 
+     // Actual watchdog usage will set a special value that this function detects.
+diff --git a/ports/raspberrypi/common-hal/rtc/RTC.c b/ports/raspberrypi/common-hal/rtc/RTC.c
+index 67935502ad..243f68d50e 100644
+--- a/ports/raspberrypi/common-hal/rtc/RTC.c
++++ b/ports/raspberrypi/common-hal/rtc/RTC.c
+@@ -14,6 +14,21 @@
+ #include "pico/util/datetime.h"
+ #include "pico/aon_timer.h"
+ 
++#ifdef PICO_RP2350
++#include "hardware/powman.h"
++#include "hardware/regs/powman.h"
++#include "hardware/structs/powman.h"
++#endif
++
++#ifdef SLEEP_DEBUG
++#include "py/mpprint.h"
++#define DEBUG_PRINT(fmt, ...) ((void)mp_printf(&mp_plat_print, "DBG:%s:%04d: " fmt "\n", __FILE__, __LINE__,##__VA_ARGS__))
++#else
++#define DEBUG_PRINT(fmt, ...)((void)0)
++#endif
++
++static int common_hal_rtc_calibration;
++
+ void common_hal_rtc_init(void) {
+     // We start the RTC at 0 which mark as January 1, 2000.
+     struct timespec t = {
+@@ -38,9 +53,49 @@ void common_hal_rtc_set_time(timeutils_struct_time_t *tm) {
+ }
+ 
+ int common_hal_rtc_get_calibration(void) {
+-    return 0;
++    return common_hal_rtc_calibration;
+ }
+ 
+ void common_hal_rtc_set_calibration(int calibration) {
+-    mp_raise_NotImplementedError_varg(MP_ERROR_TEXT("%q"), MP_QSTR_calibration);
++    // The calibration is only relevant for the LPOSC of the RP2350.
++    // Nevertheless, don't raise an exception for the RP2040 in the
++    // interest of portable programs.
++    //
++    // Format:
++    //   trim_step  1:0
++    //   trim:      9:2
++    // Limitation:
++    //   -32 <= (trim-100)/trim_step < 31
++    //
++    // Reference:
++    //  RP2350 Datasheet 6.4 POWMAN Registers, table 485 LPOSC
++    //  RP2350 Datasheet 8.4.1. Frequency Accuracy and Calibration
++
++    common_hal_rtc_calibration = calibration;
++    if (calibration == 0) {
++        return;
++    }
++    #ifdef PICO_RP2350
++    int trim = (calibration >> 2);
++    int trim_step = calibration & 0x03;
++    if (trim_step == 0) {
++      trim_step = 1;
++    }
++
++    // raw trim value
++    int trim_value = (trim-100)/trim_step;
++    // limit values
++    if (trim_value < -(int)POWMAN_LPOSC_TRIM_RESET) {
++        trim_value = -(int)POWMAN_LPOSC_TRIM_RESET;
++    } else if (trim_value > (int)POWMAN_LPOSC_TRIM_RESET-1) {
++        trim_value = (int)POWMAN_LPOSC_TRIM_RESET-1;
++    }
++    // make trim-value symmetric around default (0x20)
++    trim_value += POWMAN_LPOSC_TRIM_RESET;
++
++    DEBUG_PRINT("POWMAN_LPOSC: 0x%04lx", powman_hw->lposc);
++    DEBUG_PRINT("rtc.set_calibration: trim: %d, step: %d", trim, trim_step);
++    powman_set_bits(&powman_hw->lposc, trim_value<<POWMAN_LPOSC_TRIM_LSB);
++    DEBUG_PRINT("POWMAN_LPOSC: 0x%04lx", powman_hw->lposc);
++    #endif
+ }
 diff --git a/ports/raspberrypi/common-hal/wifi/__init__.c b/ports/raspberrypi/common-hal/wifi/__init__.c
 index 5fbe3fe58d..06c9c92bad 100644
 --- a/ports/raspberrypi/common-hal/wifi/__init__.c
@@ -968,7 +1535,7 @@ index 73988e8437..32898d2036 100644
  #define CHECK_CYW_RESULT(x) do { int res = (x); if (res != 0) raise_cyw_error(res); } while (0)
  
 diff --git a/ports/raspberrypi/mpconfigport.mk b/ports/raspberrypi/mpconfigport.mk
-index bbce13d138..992d9cd827 100644
+index bbce13d138..c50607eafa 100644
 --- a/ports/raspberrypi/mpconfigport.mk
 +++ b/ports/raspberrypi/mpconfigport.mk
 @@ -46,9 +46,10 @@ CIRCUITPY_AUDIOPWMIO ?= 1
@@ -992,8 +1559,18 @@ index bbce13d138..992d9cd827 100644
  # Default PICODVI on because it doesn't require much code in RAM to talk to HSTX.
  CIRCUITPY_PICODVI ?= 1
  
+@@ -72,6 +71,9 @@ CIRCUITPY_CYW43_INIT_DELAY ?= 0
+ 
+ # Audio effects
+ CIRCUITPY_AUDIOEFFECTS ?= 1
++
++# use experimental powman-implementation for deep-sleep
++RP2350_POWMAN ?= 1
+ endif
+ 
+ INTERNAL_LIBM = 1
 diff --git a/ports/raspberrypi/supervisor/port.c b/ports/raspberrypi/supervisor/port.c
-index 66e63248c4..470bebdd38 100644
+index 5cfbdfa66a..09aa413c05 100644
 --- a/ports/raspberrypi/supervisor/port.c
 +++ b/ports/raspberrypi/supervisor/port.c
 @@ -44,7 +44,7 @@
@@ -1005,7 +1582,15 @@ index 66e63248c4..470bebdd38 100644
  #include "pico/cyw43_arch.h"
  #endif
  #include "pico/time.h"
-@@ -405,9 +405,7 @@ safe_mode_t port_init(void) {
+@@ -52,6 +52,7 @@
+ 
+ #include "pico/bootrom.h"
+ #include "hardware/watchdog.h"
++#include "common-hal/alarm/__init__.h"    // for SCRATCH-register defines
+ 
+ #ifdef PICO_RP2350
+ #include "RP2350.h" // CMSIS
+@@ -405,9 +406,7 @@ safe_mode_t port_init(void) {
      // are inadequate. We'll back off this long delay based on future testing.
      mp_hal_delay_ms(CIRCUITPY_CYW43_INIT_DELAY);
  
@@ -1016,3 +1601,30 @@ index 66e63248c4..470bebdd38 100644
          serial_write("WiFi init failed\n");
      } else {
          cyw_ever_init = true;
+@@ -460,7 +459,13 @@ void reset_to_bootloader(void) {
+     }
+ }
+ 
+-void reset_cpu(void) {
++// explicitly called from common-hal/alarm/__init__.c with false
++// for a reset after deep-sleep keeping the scratch-register
++void reset_cpu_full(bool full) NORETURN;
++void reset_cpu_full(bool full) {
++    if (full) {
++        watchdog_hw->scratch[RP_WKUP_SCRATCH_REG] = RP_SLEEP_WAKEUP_UNDEF;
++    }
+     watchdog_reboot(0, SRAM_END, 0);
+     watchdog_start_tick(12);
+ 
+@@ -469,6 +474,11 @@ void reset_cpu(void) {
+     }
+ }
+ 
++// this is a generic reset, so clear any prior alarm wakup state
++void reset_cpu(void) {
++    reset_cpu_full(true);
++}
++
+ // From the linker script
+ extern uint32_t _ld_cp_dynamic_mem_start;
+ extern uint32_t _ld_cp_dynamic_mem_end;
