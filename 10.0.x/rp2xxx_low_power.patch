@@ -107,7 +107,7 @@ index 70f9ec294f..daf555491b 100644
 +extern void bindings_cyw43_power_down(void);
 +extern bool bindings_cyw43_power_up(void);
 diff --git a/ports/raspberrypi/common-hal/alarm/__init__.c b/ports/raspberrypi/common-hal/alarm/__init__.c
-index c47ddc3150..e0e4c5edbb 100644
+index c47ddc3150..7319eb3e5e 100644
 --- a/ports/raspberrypi/common-hal/alarm/__init__.c
 +++ b/ports/raspberrypi/common-hal/alarm/__init__.c
 @@ -4,10 +4,14 @@
@@ -571,9 +571,9 @@ index c47ddc3150..e0e4c5edbb 100644
 +    #ifdef RP2350_POWMAN
 +    if (!_is_workflow_active()) {
 +        pm_cause = powman_hw->last_swcore_pwrup;
-+        if (pm_cause & 0x40) {
++        if (pm_cause & 0x40) {                     // bit 6: alarm_pwrup
 +            cause = RP_SLEEP_WAKEUP_RTC;
-+        } else if (pm_cause & 0x1E) {
++        } else if (pm_cause & 0x1E) {              // bits 1-4: pwrup0..pwrup3
 +            cause = RP_SLEEP_WAKEUP_GPIO;
 +        } else {
 +            cause = RP_SLEEP_WAKEUP_UNDEF;
@@ -812,7 +812,7 @@ index 49e06a4c32..2c3c04270b 100644
      alarm_pin_pinalarm_obj_t pin_alarm;
      alarm_time_timealarm_obj_t time_alarm;
 diff --git a/ports/raspberrypi/common-hal/alarm/pin/PinAlarm.c b/ports/raspberrypi/common-hal/alarm/pin/PinAlarm.c
-index 350306390e..f89d710fad 100644
+index 350306390e..ac4218e93c 100644
 --- a/ports/raspberrypi/common-hal/alarm/pin/PinAlarm.c
 +++ b/ports/raspberrypi/common-hal/alarm/pin/PinAlarm.c
 @@ -14,23 +14,50 @@
@@ -893,13 +893,13 @@ index 350306390e..f89d710fad 100644
 +    // if POWMAN woke us up, get the pin from the POWMAN-registers
 +    // check which bit (1-4) of pm_cause == LAST_SWCORE_PWRUP is set
 +    if (pm_cause > 0) {
-+      int i;
-+      for (i=1; i<5; ++i) {
++      uint i;
++      for (i=1; i<=POWMAN_MAX_WAKEUP_SLOTS; ++i) {
 +        if (pm_cause & (1<<i)) {
 +          break;
 +        }
 +      }
-+      if (i<5) {
++      if (i<=POWMAN_MAX_WAKEUP_SLOTS) {
 +        alarm->pin = mcu_get_pin_by_number(powman_hw->pwrup[i-1] &
 +                                           POWMAN_PWRUP0_SOURCE_BITS);
 +      } else {
@@ -1386,7 +1386,7 @@ index 1f7c3f9eda..731be23370 100644
  }
  
 diff --git a/ports/raspberrypi/common-hal/microcontroller/Processor.c b/ports/raspberrypi/common-hal/microcontroller/Processor.c
-index a3ea890d9a..24661f08e6 100644
+index a3ea890d9a..3b73bbf312 100644
 --- a/ports/raspberrypi/common-hal/microcontroller/Processor.c
 +++ b/ports/raspberrypi/common-hal/microcontroller/Processor.c
 @@ -10,6 +10,7 @@
@@ -1402,7 +1402,7 @@ index a3ea890d9a..24661f08e6 100644
      #endif
      #ifdef PICO_RP2350
 +    #ifdef RP2350_POWMAN
-+    // check if one of the bits 1-4 (gpio wakeup) or 6 (alarm wakeup) is on
++    // check if one of the bits 1-4 (gpio wakeup 0x1E) or 6 (0x40 alarm wakeup) is on
 +    if (powman_hw->last_swcore_pwrup & 0x5E) {
 +        return RESET_REASON_DEEP_SLEEP_ALARM;
 +    }
@@ -1628,3 +1628,44 @@ index 5cfbdfa66a..09aa413c05 100644
  // From the linker script
  extern uint32_t _ld_cp_dynamic_mem_start;
  extern uint32_t _ld_cp_dynamic_mem_end;
+diff --git a/shared-bindings/rtc/RTC.c b/shared-bindings/rtc/RTC.c
+index d732ee94d7..972f436668 100644
+--- a/shared-bindings/rtc/RTC.c
++++ b/shared-bindings/rtc/RTC.c
+@@ -82,7 +82,35 @@ MP_PROPERTY_GETSET(rtc_rtc_datetime_obj,
+ //|       import time
+ //|
+ //|       r = rtc.RTC()
+-//|       r.calibration = 1"""
++//|       r.calibration = 1
++//|
++//|     On the RP2350, the calibration value trims the low-power oscillator LPOSC
++//|     (relevant during light-sleep and deep-sleep).
++//|
++//|     Format (bits)::
++//|       trim_step  1:0
++//|       trim:      9:2
++//|     Limitation:
++//|       -32 <= (trim-100)/trim_step < 31
++//|
++//|     To calibrate the LPOSC if the system runs 120s instead of 100s,
++//|     use::
++//|
++//|       r = rtc.RTC()
++//|       r.calibration = (120<<2) + 1
++//|
++//|     Here trim is 120 and trim_step is 1. The correct value of trim_step
++//|     is typically 1, but can be as large as 3 and has to be evaluated
++//|     empirically. The default value of 0 does not calibrate and is identical
++//|     to a value of (100<<2). Note that a trim_step of 0 is internally
++//|     treated as 1 for reasons of simplicity.
++//|
++//|     To support identical code for the RP2040 and RP2350, the calibration
++//|     can also be set for the RP2040, but it is silently ignored.
++//|
++//|     Reference::
++//|     RP2350 Datasheet 6.4 POWMAN Registers, table 485 LPOSC
++//|     RP2350 Datasheet 8.4.1. Frequency Accuracy and Calibration"""
+ //|
+ //|
+ static mp_obj_t rtc_rtc_obj_get_calibration(mp_obj_t self_in) {
