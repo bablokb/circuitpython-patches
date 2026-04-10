@@ -1,8 +1,8 @@
 diff --git a/main.c b/main.c
-index f4f67b0434..d5c0bfd6df 100644
+index c9ed036bf8..f3d4434740 100644
 --- a/main.c
 +++ b/main.c
-@@ -696,7 +696,12 @@ static bool __attribute__((noinline)) run_code_py(safe_mode_t safe_mode, bool *s
+@@ -698,7 +698,12 @@ static bool __attribute__((noinline)) run_code_py(safe_mode_t safe_mode, bool *s
                  board_deinit();
  
                  // Continue with true deep sleep even if workflow is available.
@@ -16,10 +16,10 @@ index f4f67b0434..d5c0bfd6df 100644
                      // top of main(), not in this loop.
                      common_hal_alarm_enter_deep_sleep();
 diff --git a/ports/raspberrypi/Makefile b/ports/raspberrypi/Makefile
-index b75d542325..8a5e433826 100644
+index cef2806c87..f853dc24ea 100644
 --- a/ports/raspberrypi/Makefile
 +++ b/ports/raspberrypi/Makefile
-@@ -451,6 +451,10 @@ INC += \
+@@ -453,6 +453,10 @@ INC += \
  
  CFLAGS += -DPICO_RP2350=1
  
@@ -30,7 +30,7 @@ index b75d542325..8a5e433826 100644
  SRC_SDK_CHIP_VARIANT := \
  	src/rp2_common/hardware_powman/powman.c \
  
-@@ -535,6 +539,7 @@ SRC_C += \
+@@ -538,6 +542,7 @@ SRC_C += \
  	bindings/rp2pio/__init__.c \
  	common-hal/rp2pio/StateMachine.c \
  	common-hal/rp2pio/__init__.c \
@@ -1535,10 +1535,10 @@ index 73988e8437..32898d2036 100644
  #define CHECK_CYW_RESULT(x) do { int res = (x); if (res != 0) raise_cyw_error(res); } while (0)
  
 diff --git a/ports/raspberrypi/mpconfigport.mk b/ports/raspberrypi/mpconfigport.mk
-index bbce13d138..c50607eafa 100644
+index 90be1afd10..04f4e58efb 100644
 --- a/ports/raspberrypi/mpconfigport.mk
 +++ b/ports/raspberrypi/mpconfigport.mk
-@@ -46,9 +46,10 @@ CIRCUITPY_AUDIOPWMIO ?= 1
+@@ -49,9 +49,10 @@ CIRCUITPY_AUDIOPWMIO ?= 1
  
  CIRCUITPY_AUDIOMIXER ?= 1
  
@@ -1550,7 +1550,7 @@ index bbce13d138..c50607eafa 100644
  # Default PICODVI off because it uses RAM to store code run on the second CPU for RP2040.
  CIRCUITPY_PICODVI ?= 0
  
-@@ -62,8 +63,6 @@ ifeq ($(CHIP_VARIANT),RP2350)
+@@ -65,8 +66,6 @@ ifeq ($(CHIP_VARIANT),RP2350)
  # RP2350 has PSRAM that is not DMA-capable
  CIRCUITPY_ALL_MEMORY_DMA_CAPABLE = 0
  
@@ -1559,7 +1559,7 @@ index bbce13d138..c50607eafa 100644
  # Default PICODVI on because it doesn't require much code in RAM to talk to HSTX.
  CIRCUITPY_PICODVI ?= 1
  
-@@ -72,6 +71,9 @@ CIRCUITPY_CYW43_INIT_DELAY ?= 0
+@@ -75,6 +74,9 @@ CIRCUITPY_CYW43_INIT_DELAY ?= 0
  
  # Audio effects
  CIRCUITPY_AUDIOEFFECTS ?= 1
@@ -1570,7 +1570,7 @@ index bbce13d138..c50607eafa 100644
  
  INTERNAL_LIBM = 1
 diff --git a/ports/raspberrypi/supervisor/port.c b/ports/raspberrypi/supervisor/port.c
-index 5cfbdfa66a..09aa413c05 100644
+index bb6482240a..00f8d744ce 100644
 --- a/ports/raspberrypi/supervisor/port.c
 +++ b/ports/raspberrypi/supervisor/port.c
 @@ -44,7 +44,7 @@

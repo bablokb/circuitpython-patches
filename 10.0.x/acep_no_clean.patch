@@ -1,5 +1,5 @@
 diff --git a/py/circuitpy_mpconfig.mk b/py/circuitpy_mpconfig.mk
-index 8c838a4121..13c204d558 100644
+index 1701229032..04374bd855 100644
 --- a/py/circuitpy_mpconfig.mk
 +++ b/py/circuitpy_mpconfig.mk
 @@ -48,6 +48,10 @@ enable-if-not=$(if $(filter 1,$(1)),0,1)
@@ -14,10 +14,10 @@ index 8c838a4121..13c204d558 100644
  CIRCUITPY = 1
  CFLAGS += -DCIRCUITPY=$(CIRCUITPY)
 diff --git a/shared-module/epaperdisplay/EPaperDisplay.c b/shared-module/epaperdisplay/EPaperDisplay.c
-index 556db6ae22..b65e05756e 100644
+index d34be9d5c7..f1d98b47be 100644
 --- a/shared-module/epaperdisplay/EPaperDisplay.c
 +++ b/shared-module/epaperdisplay/EPaperDisplay.c
-@@ -377,6 +377,7 @@ static bool epaperdisplay_epaperdisplay_refresh_area(epaperdisplay_epaperdisplay
+@@ -386,6 +386,7 @@ static bool epaperdisplay_epaperdisplay_refresh_area(epaperdisplay_epaperdisplay
      return true;
  }
  
@@ -25,7 +25,7 @@ index 556db6ae22..b65e05756e 100644
  static bool _clean_area(epaperdisplay_epaperdisplay_obj_t *self) {
      uint16_t width = displayio_display_core_get_width(&self->core);
      uint16_t height = displayio_display_core_get_height(&self->core);
-@@ -406,6 +407,7 @@ static bool _clean_area(epaperdisplay_epaperdisplay_obj_t *self) {
+@@ -417,6 +418,7 @@ static bool _clean_area(epaperdisplay_epaperdisplay_obj_t *self) {
  
      return true;
  }
@@ -33,7 +33,7 @@ index 556db6ae22..b65e05756e 100644
  
  bool common_hal_epaperdisplay_epaperdisplay_refresh(epaperdisplay_epaperdisplay_obj_t *self) {
  
-@@ -434,6 +436,7 @@ bool common_hal_epaperdisplay_epaperdisplay_refresh(epaperdisplay_epaperdisplay_
+@@ -445,6 +447,7 @@ bool common_hal_epaperdisplay_epaperdisplay_refresh(epaperdisplay_epaperdisplay_
      if (current_area == NULL) {
          return true;
      }
@@ -41,7 +41,7 @@ index 556db6ae22..b65e05756e 100644
      if (self->acep) {
          epaperdisplay_epaperdisplay_start_refresh(self);
          _clean_area(self);
-@@ -442,6 +445,7 @@ bool common_hal_epaperdisplay_epaperdisplay_refresh(epaperdisplay_epaperdisplay_
+@@ -453,6 +456,7 @@ bool common_hal_epaperdisplay_epaperdisplay_refresh(epaperdisplay_epaperdisplay_
              RUN_BACKGROUND_TASKS;
          }
      }

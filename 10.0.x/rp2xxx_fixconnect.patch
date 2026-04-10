@@ -1,8 +1,8 @@
 diff --git a/locale/circuitpython.pot b/locale/circuitpython.pot
-index 1e167c3035..13b0de35bd 100644
+index 07623ea94a..ee0c9abdc6 100644
 --- a/locale/circuitpython.pot
 +++ b/locale/circuitpython.pot
-@@ -3005,6 +3005,10 @@ msgstr ""
+@@ -3034,6 +3034,10 @@ msgstr ""
  msgid "corrupted file"
  msgstr ""
  

@@ -1,5 +1,5 @@
 diff --git a/.gitmodules b/.gitmodules
-index b89769942a..934b7cbaab 100644
+index a7b67b8d86..6e53dace1a 100644
 --- a/.gitmodules
 +++ b/.gitmodules
 @@ -2,6 +2,9 @@
@@ -14,11 +14,11 @@ index b89769942a..934b7cbaab 100644
  	url = https://github.com/micropython/axtls.git
 diff --git a/frozen/circuitpython-esp32at b/frozen/circuitpython-esp32at
 new file mode 160000
-index 0000000000..79ca5bad94
+index 0000000000..35eb59d8b1
 --- /dev/null
 +++ b/frozen/circuitpython-esp32at
 @@ -0,0 +1 @@
-+Subproject commit 79ca5bad94f451f067dc47332de2db176bdfa164
++Subproject commit 35eb59d8b1e6dac6fa245e1a48aa999fd79f8d18
 diff --git a/ports/raspberrypi/boards/challenger_rp2350_bconnect/mpconfigboard.mk b/ports/raspberrypi/boards/challenger_rp2350_bconnect/mpconfigboard.mk
 index 44e9b49295..75722c700b 100644
 --- a/ports/raspberrypi/boards/challenger_rp2350_bconnect/mpconfigboard.mk

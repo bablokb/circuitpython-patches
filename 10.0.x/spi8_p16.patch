@@ -84,13 +84,13 @@ index 0000000000..3df42b8c0f
 +                     rotation=0,
 +                     **kwargs)
 diff --git a/shared-module/displayio/bus_core.c b/shared-module/displayio/bus_core.c
-index e01b9d9eef..f95ecbdbe3 100644
+index 9b3fb42621..62baaa1041 100644
 --- a/shared-module/displayio/bus_core.c
 +++ b/shared-module/displayio/bus_core.c
-@@ -129,12 +129,12 @@ void displayio_display_bus_set_region_to_update(displayio_display_bus_t *self, d
- 
-     // Set column.
-     displayio_display_bus_begin_transaction(self);
+@@ -152,12 +152,12 @@ void displayio_display_bus_set_region_to_update(displayio_display_bus_t *self, d
+     if (!displayio_display_bus_begin_transaction(self)) {
+         return;
+     }
 -    uint8_t data[5];
 +    uint8_t data[9];
      data[0] = self->column_command;
@@ -102,7 +102,7 @@ index e01b9d9eef..f95ecbdbe3 100644
          data_length = 0;
      } else {
          data_type = DISPLAY_COMMAND;
-@@ -148,9 +148,13 @@ void displayio_display_bus_set_region_to_update(displayio_display_bus_t *self, d
+@@ -171,9 +171,13 @@ void displayio_display_bus_set_region_to_update(displayio_display_bus_t *self, d
              x1 = __builtin_bswap16(x1);
              x2 = __builtin_bswap16(x2);
          }
@@ -116,7 +116,7 @@ index e01b9d9eef..f95ecbdbe3 100644
          data[data_length++] = x2 & 0xff;
      }
  
-@@ -180,7 +184,7 @@ void displayio_display_bus_set_region_to_update(displayio_display_bus_t *self, d
+@@ -207,7 +211,7 @@ void displayio_display_bus_set_region_to_update(displayio_display_bus_t *self, d
      data[0] = self->row_command;
      data_length = 1;
      if (!self->data_as_commands) {
@@ -125,7 +125,7 @@ index e01b9d9eef..f95ecbdbe3 100644
          data_length = 0;
      }
  
-@@ -192,9 +196,13 @@ void displayio_display_bus_set_region_to_update(displayio_display_bus_t *self, d
+@@ -219,9 +223,13 @@ void displayio_display_bus_set_region_to_update(displayio_display_bus_t *self, d
              y1 = __builtin_bswap16(y1);
              y2 = __builtin_bswap16(y2);
          }
