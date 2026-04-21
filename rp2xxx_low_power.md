@@ -73,3 +73,29 @@ instead of `ResetReason.DEEP_SLEEP_ALARM`. This also trips the logic
 within `main.c`.
 
 The patch fixes this for the RP2040 and implements it for the RP2350.
+
+
+Mapping of RP2xxx sleep-modes to CircuitPython
+----------------------------------------------
+
+The RP2xxx low power modes "sleep", "dormant" and "PowMan" map
+as documented in the following table. Note that for combined alarms
+(time-alarm *and* pin-alarm) the time-alarm columns are relevant.
+
+
+|           | LS-TA    | DS-TA    | LS-PA   | DS-PA   |
+|-----------|----------|----------|---------|---------|
+|RP2040     | sleep    | dormant  | dormant | dormant |
+|RP2350     | dormant¹ | PowMan¹  | dormant | PowMan  |
+
+¹ uses the LPOSC
+
+The low power oscillator (LPOSC) is not very precise, so sleep times
+can be off. This depends on the board and the specimen. One of the
+test devices (Pimoroni Pico Plus2) was off by 25%.
+
+Some calibration is possible using `rtc.calibration`. See the docs
+in `ports/raspberrypi/common-hal/rtc/RTC.c`.
+
+For better timings, a pin-alarm in combination with an external RTC
+with alarm pin is the better choice.
