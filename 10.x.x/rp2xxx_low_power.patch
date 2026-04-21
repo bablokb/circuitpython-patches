@@ -1,13 +1,41 @@
 diff --git a/main.c b/main.c
-index c9ed036bf8..f3d4434740 100644
+index ce058cc49c..b7f7107fdd 100644
 --- a/main.c
 +++ b/main.c
-@@ -698,7 +698,12 @@ static bool __attribute__((noinline)) run_code_py(safe_mode_t safe_mode, bool *s
+@@ -50,6 +50,15 @@
+ 
+ #include "shared-bindings/os/__init__.h"
+ 
++#ifdef SLEEP_DEBUG
++#include "py/mpprint.h"
++#define DEBUG_PRINT(fmt, ...) ((void)mp_printf(&mp_plat_print, "DBG:%s:%04d: " fmt "\n", __FILE__, __LINE__,##__VA_ARGS__))
++#define SLEEP(ms) mp_hal_delay_us(1000*ms)
++#else
++#define DEBUG_PRINT(fmt, ...)((void)0)
++#define SLEEP(ms)((void)0)
++#endif
++
+ #if CIRCUITPY_ALARM
+ #include "shared-bindings/alarm/__init__.h"
+ #endif
+@@ -673,7 +682,8 @@ static bool __attribute__((noinline)) run_code_py(safe_mode_t safe_mode, bool *s
+         if (_exec_result.return_code & PYEXEC_DEEP_SLEEP) {
+             const bool awoke_from_true_deep_sleep =
+                 common_hal_mcu_processor_get_reset_reason() == RESET_REASON_DEEP_SLEEP_ALARM;
+-
++            //DEBUG_PRINT("awoke_from_true_deep_sleep: %s", awoke_from_true_deep_sleep ? "true": "false");
++            //SLEEP(10);
+             if (fake_sleeping) {
+                 // This waits until a pretend deep sleep alarm occurs. They are set
+                 // during common_hal_alarm_set_deep_sleep_alarms. On some platforms
+@@ -698,7 +708,14 @@ static bool __attribute__((noinline)) run_code_py(safe_mode_t safe_mode, bool *s
                  board_deinit();
  
                  // Continue with true deep sleep even if workflow is available.
 +                // (unconditionally with compile-time config)
 +                #ifdef NO_FAKESLEEP
++                DEBUG_PRINT("NO_FAKESLEEP set");
++                SLEEP(10);
 +                if (true) {
 +                #else
                  if (awoke_from_true_deep_sleep || !supervisor_workflow_active()) {
@@ -107,7 +135,7 @@ index 70f9ec294f..daf555491b 100644
 +extern void bindings_cyw43_power_down(void);
 +extern bool bindings_cyw43_power_up(void);
 diff --git a/ports/raspberrypi/common-hal/alarm/__init__.c b/ports/raspberrypi/common-hal/alarm/__init__.c
-index c47ddc3150..7319eb3e5e 100644
+index a72b3a368d..9acd7d2210 100644
 --- a/ports/raspberrypi/common-hal/alarm/__init__.c
 +++ b/ports/raspberrypi/common-hal/alarm/__init__.c
 @@ -4,10 +4,14 @@
@@ -138,7 +166,7 @@ index c47ddc3150..7319eb3e5e 100644
  
  #include "pico/stdlib.h"
  #include "hardware/sync.h"
-@@ -32,42 +36,330 @@
+@@ -32,42 +36,341 @@
  #include "hardware/structs/scb.h"
  #include "hardware/watchdog.h"
  #include "hardware/structs/watchdog.h"
@@ -229,7 +257,7 @@ index c47ddc3150..7319eb3e5e 100644
 +} dormant_source_t;
 +
 +// from supervisor/port.c, which does not have a header-file
-+extern void reset_cpu_full(bool full) NORETURN;
++extern void reset_cpu_full(bool full) MP_NORETURN;
 +
 +static void _sleep_run_from_dormant_source(dormant_source_t dormant_source);
 +
@@ -258,6 +286,17 @@ index c47ddc3150..7319eb3e5e 100644
 +// State of the workflow
 +static bool _is_workflow_active(void) {
 +    #ifdef IGNORE_WORKFLOW
++    DEBUG_PRINT("IGNORE_WORKFLOW set");
++    return false;
++    #else
++    return supervisor_workflow_active();
++    #endif
++}
++
++// State of fake deep sleep (see main.c)
++static bool _fake_deepsleep(void) {
++    #ifdef NO_FAKESLEEP
++    DEBUG_PRINT("NO_FAKESLEEP set");
 +    return false;
 +    #else
 +    return supervisor_workflow_active();
@@ -502,7 +541,7 @@ index c47ddc3150..7319eb3e5e 100644
  
  // Singleton instance of SleepMemory.
  const alarm_sleep_memory_obj_t alarm_sleep_memory_obj = {
-@@ -81,20 +373,27 @@ const alarm_sleep_memory_obj_t alarm_sleep_memory_obj = {
+@@ -81,20 +384,27 @@ const alarm_sleep_memory_obj_t alarm_sleep_memory_obj = {
  alarm_wake_alarm_union_t alarm_wake_alarm;
  
  void alarm_reset(void) {
@@ -533,7 +572,7 @@ index c47ddc3150..7319eb3e5e 100644
          return RP_SLEEP_WAKEUP_RTC;
      }
      // If waking from true deep sleep, modules will have lost their state,
-@@ -107,8 +406,24 @@ static uint8_t _get_wakeup_cause(void) {
+@@ -107,8 +417,25 @@ static uint8_t _get_wakeup_cause(void) {
  
  // Set up light sleep or deep sleep alarms.
  static void _setup_sleep_alarms(bool deep_sleep, size_t n_alarms, const mp_obj_t *alarms) {
@@ -551,15 +590,16 @@ index c47ddc3150..7319eb3e5e 100644
 +    #endif
 +    // deep-sleep uses powman, while light-sleep/fake-sleep use normal gpio
 +    // wakeup
-+    alarm_pin_pinalarm_set_alarms(deep_sleep && !_is_workflow_active(),
-+                                  n_alarms, alarms);
++    alarm_pin_pinalarm_set_alarms(
++        deep_sleep && !_is_workflow_active() && !_fake_deepsleep(),
++        n_alarms, alarms);
      alarm_time_timealarm_set_alarms(deep_sleep, n_alarms, alarms);
 +    DEBUG_PRINT("_setup_sleep_alarms (finished)");
 +    SLEEP(10);
  }
  
  bool common_hal_alarm_woken_from_sleep(void) {
-@@ -118,14 +433,37 @@ bool common_hal_alarm_woken_from_sleep(void) {
+@@ -118,14 +445,37 @@ bool common_hal_alarm_woken_from_sleep(void) {
  mp_obj_t common_hal_alarm_record_wake_alarm(void) {
      // If woken from deep sleep, create a copy alarm similar to what would have
      // been passed in originally. Otherwise, just return none
@@ -599,7 +639,7 @@ index c47ddc3150..7319eb3e5e 100644
          }
  
          case RP_SLEEP_WAKEUP_UNDEF:
-@@ -137,14 +475,12 @@ mp_obj_t common_hal_alarm_record_wake_alarm(void) {
+@@ -137,14 +487,12 @@ mp_obj_t common_hal_alarm_record_wake_alarm(void) {
  }
  
  mp_obj_t common_hal_alarm_light_sleep_until_alarms(size_t n_alarms, const mp_obj_t *alarms) {
@@ -616,7 +656,7 @@ index c47ddc3150..7319eb3e5e 100644
      while (!mp_hal_is_interrupted()) {
          RUN_BACKGROUND_TASKS;
          // Detect if interrupt was alarm or ctrl-C interrupt.
-@@ -166,26 +502,13 @@ mp_obj_t common_hal_alarm_light_sleep_until_alarms(size_t n_alarms, const mp_obj
+@@ -166,99 +514,126 @@ mp_obj_t common_hal_alarm_light_sleep_until_alarms(size_t n_alarms, const mp_obj
              shared_alarm_save_wake_alarm(wake_alarm);
              break;
          }
@@ -644,10 +684,22 @@ index c47ddc3150..7319eb3e5e 100644
      alarm_reset();
      return wake_alarm;
  }
-@@ -198,67 +521,98 @@ void common_hal_alarm_set_deep_sleep_alarms(size_t n_alarms, const mp_obj_t *ala
+ 
+ void common_hal_alarm_set_deep_sleep_alarms(size_t n_alarms, const mp_obj_t *alarms, size_t n_dios, digitalio_digitalinout_obj_t **preserve_dios) {
+-    if (n_dios > 0) {
+-        mp_raise_NotImplementedError_varg(MP_ERROR_TEXT("%q"), MP_QSTR_preserve_dios);
++    DEBUG_PRINT("common_hal_alarm_set_deep_sleep_alarms (start)");
++
++    // Note: this does *not* preserve DIOs across resets, but it keeps DIO-state
++    //       until reset (i.e. during deep-sleep)
++    for (size_t i=0; i<n_dios; ++i) {
++        common_hal_never_reset_pin(preserve_dios[i]->pin);
+     }
+     _setup_sleep_alarms(true, n_alarms, alarms);
++    DEBUG_PRINT("common_hal_alarm_set_deep_sleep_alarms (end)");
  }
  
- void NORETURN common_hal_alarm_enter_deep_sleep(void) {
+ void MP_NORETURN common_hal_alarm_enter_deep_sleep(void) {
 -    bool timealarm_set = alarm_time_timealarm_is_set();
 -
 -    #if CIRCUITPY_CYW43
@@ -669,7 +721,11 @@ index c47ddc3150..7319eb3e5e 100644
 -    }
 -    // // TODO: support ROSC when available in SDK
 -    // rosc_set_dormant();
++    DEBUG_PRINT("common_hal_alarm_enter_deep_sleep (start)");
++    SLEEP(10);
 +    _goto_sleep_or_dormant(true);
++    DEBUG_PRINT("common_hal_alarm_enter_deep_sleep (end)");
++    SLEEP(10);
  
      // Reset uses the watchdog. Use scratch registers to store wake reason
      watchdog_hw->scratch[RP_WKUP_SCRATCH_REG] = _get_wakeup_cause();
@@ -1523,7 +1579,7 @@ index 5fbe3fe58d..06c9c92bad 100644
      if (wifi_user_initiated) {
          wifi_reset();
 diff --git a/ports/raspberrypi/common-hal/wifi/__init__.h b/ports/raspberrypi/common-hal/wifi/__init__.h
-index 73988e8437..32898d2036 100644
+index 4005c48a3c..2701bfb3dd 100644
 --- a/ports/raspberrypi/common-hal/wifi/__init__.h
 +++ b/ports/raspberrypi/common-hal/wifi/__init__.h
 @@ -11,6 +11,7 @@
@@ -1531,7 +1587,7 @@ index 73988e8437..32898d2036 100644
  
  void wifi_reset(void);
 +void wifi_power_up_reset(void);
- NORETURN void raise_cyw_error(int err);
+ MP_NORETURN void raise_cyw_error(int err);
  #define CHECK_CYW_RESULT(x) do { int res = (x); if (res != 0) raise_cyw_error(res); } while (0)
  
 diff --git a/ports/raspberrypi/mpconfigport.mk b/ports/raspberrypi/mpconfigport.mk
@@ -1570,7 +1626,7 @@ index 90be1afd10..04f4e58efb 100644
  
  INTERNAL_LIBM = 1
 diff --git a/ports/raspberrypi/supervisor/port.c b/ports/raspberrypi/supervisor/port.c
-index bb6482240a..00f8d744ce 100644
+index 0316e34ad9..6c8a42d87d 100644
 --- a/ports/raspberrypi/supervisor/port.c
 +++ b/ports/raspberrypi/supervisor/port.c
 @@ -44,7 +44,7 @@
@@ -1608,7 +1664,7 @@ index bb6482240a..00f8d744ce 100644
 -void reset_cpu(void) {
 +// explicitly called from common-hal/alarm/__init__.c with false
 +// for a reset after deep-sleep keeping the scratch-register
-+void reset_cpu_full(bool full) NORETURN;
++void reset_cpu_full(bool full) MP_NORETURN;
 +void reset_cpu_full(bool full) {
 +    if (full) {
 +        watchdog_hw->scratch[RP_WKUP_SCRATCH_REG] = RP_SLEEP_WAKEUP_UNDEF;
