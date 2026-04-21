@@ -10,6 +10,8 @@ This patch
   - `microcontroller.cpu.reset_reason` now correctly returns
     `DEEP_SLEEP_ALARM` instead of `SOFTWARE`
   - implements `rtc.calibration` for the RP2350 low-power oscillator
+  - partial implementation of the `preserve_dios` parameter of
+    `alarm.exit_and_deep_sleep_until_alarms()`
 
 
 Alarm-Module for RP2350
@@ -73,6 +75,22 @@ instead of `ResetReason.DEEP_SLEEP_ALARM`. This also trips the logic
 within `main.c`.
 
 The patch fixes this for the RP2040 and implements it for the RP2350.
+
+
+`preserve_dios` for Deep-Sleep Alarms
+-------------------------------------
+
+This parameter allows passing in digitial IOs whose state should be
+preserved *across* deep-sleep and the following reset.
+
+The RP2xxx-family does not support this feature. This patch at least
+preserves state *during* deep-sleep until the reset takes place. The
+mainline alarm-module for the RP2040 resets all pins *before* entering
+deep-sleep, making it impossible e.g. to turn off the backlight of a
+display. With this patch, the registered IOs won't change their state.
+
+No attempt is made to restore the state after reset. This could be
+implemented, but not glitch-free.
 
 
 Mapping of RP2xxx sleep-modes to CircuitPython
